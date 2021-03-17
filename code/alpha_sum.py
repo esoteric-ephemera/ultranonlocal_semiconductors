@@ -40,23 +40,20 @@ def init_ang_grid():
     ang_wg/=(4*pi)
     return q_hat,ang_wg
 
-def wrap_mcp07(q,omega,n):
+def wrap_kernel(q,omega,n,wfxc):
     dv = {}
     dv['n'] = n
     dv['kF'] = (3*pi*n)**(1/3)
     dv['rs'] = (3/(4*pi*n))**(1/3)
     dv['rsh'] = dv['rs']**(0.5)
-    fxc = mcp07_dynamic(q,omega,dv,axis='real',revised=False,param='PZ81')
-    return fxc
-
-def wrap_dyn_lda(q,omega,n):
-    dv = {}
-    dv['n'] = n
-    dv['kF'] = (3*pi*n)**(1/3)
-    dv['rs'] = (3/(4*pi*n))**(1/3)
-    dv['rsh'] = dv['rs']**(0.5)
-    #fxc = alda(dv,x_only=False,param='PW92')
-    fxc=gki_dynamic_real_freq(dv,omega,x_only=False,revised=False,param='PW92',dimensionless=False)
+    if wfxc == 'MCP07':
+        fxc = mcp07_dynamic(q,omega,dv,axis='real',revised=False,param='PZ81',no_k=False)
+    elif wfxc == 'MCP07_k0':
+        fxc = mcp07_dynamic(q,omega,dv,axis='real',revised=False,param='PZ81',no_k=True)
+    elif wfxc == 'DLDA':
+        fxc=gki_dynamic_real_freq(dv,omega,x_only=False,revised=False,param='PZ81',dimensionless=False)
+    else:
+        raise ValueError('Unknown XC kernel, ', wfxc)
     return fxc
 
 def calc_alpha(sph_avg=False,fxc='MCP07'):
@@ -81,10 +78,7 @@ def calc_alpha(sph_avg=False,fxc='MCP07'):
     gmod = (g[:,0]**2 + g[:,1]**2 + g[:,2]**2)**(0.5)
     Ng = g.shape[0]
     """ only need to evaluate zero-frequency term once   """
-    if fxc == 'MCP07':
-        fxc_g0 = wrap_mcp07(gmod,np.zeros(Ng),np.abs(ng0))
-    elif fxc == 'DLDA':
-        fxc_g0 = wrap_dyn_lda(gmod,np.zeros(Ng),np.abs(ng0))
+    fxc_g0 = wrap_kernel(gmod,np.zeros(Ng),np.abs(ng0),fxc)
 
     omega_l = np.arange(0.01,50,0.05)
     alpha = np.zeros(omega_l.shape[0],dtype='complex')
@@ -100,10 +94,7 @@ def calc_alpha(sph_avg=False,fxc='MCP07'):
         #n_avg = np.sum(ng0)/ng0.shape[0]
         #ng0 = ng0**2
         for iom,om in enumerate(omega_l):
-            if fxc == 'MCP07':
-                fxc_g = wrap_mcp07(gmod,om,np.abs(ng0))
-            elif fxc == 'DLDA':
-                fxc_g = wrap_dyn_lda(gmod,om,np.abs(ng0))
+            fxc_g = wrap_kernel(gmod,om,np.abs(ng0),fxc)
             fxc_diff = fxc_g - fxc_g0
             for iag in range(Ng):
                 alpha[iom] += np.sum(intwg*g_dot_q_hat[iag]*fxc_diff[iag]*ng02[iag])/n_avg2
@@ -112,10 +103,7 @@ def calc_alpha(sph_avg=False,fxc='MCP07'):
         g_dot_q_hat = gmod**2
         intwg = 1.0/3.0
         for iom,om in enumerate(omega_l):
-            if fxc == 'MCP07':
-                fxc_g = wrap_mcp07(gmod,om,np.abs(ng0))
-            elif fxc == 'DLDA':
-                fxc_g = wrap_dyn_lda(gmod,om,np.abs(ng0))
+            fxc_g = wrap_kernel(gmod,om,np.abs(ng0),fxc)
             fxc_diff = fxc_g - fxc_g0
             alpha[iom] = intwg*np.sum(g_dot_q_hat*fxc_diff*ng02)/n_avg2
 
@@ -136,34 +124,41 @@ def plotter(sph_avg=False,fxc=[]):
             flnm = './alpha_omega_'+anfxc+'.csv'
 
         om,alp_re,alp_im = np.transpose(np.genfromtxt(flnm,delimiter=',',skip_header=1))
-        #om*=Eh_to_eV
-        ax[0].plot(om,alp_re,label=anfxc)
-        ax[1].plot(om,alp_im)
+        om*=Eh_to_eV
+        if anfxc == 'DLDA':
+            lbl = 'Dynamic LDA'
+        elif anfxc == 'MCP07_k0':
+            lbl = 'MCP07, $\\bar{k}=0$'
+        else:
+            lbl = anfxc
+        ax[0].plot(om,alp_re)
+        ax[1].plot(om,alp_im,label=lbl)
         max_bd = max([max_bd,alp_re.max()])
         min_bd = min([min_bd,alp_im.min()])
-    ax[0].legend(fontsize=14)
+    ax[1].legend(fontsize=14)
     #ax[0].set_yticks(np.arange(0.0,max_bd,.1))
     #ax[1].set_yticks(np.arange(0.0,min_bd,-.1))
     ax[0].set_ylim([0.0,ax[0].get_ylim()[1]])
     ax[1].set_ylim([ax[1].get_ylim()[0],0.0])
-    ax[1].set_xlabel('$\\omega$ (a.u.)',fontsize=18)
-    ax[0].set_ylabel('$\\mathrm{Re}~\\alpha(\\omega)$',fontsize=18)
-    ax[1].set_ylabel('$\\mathrm{Im}~\\alpha(\\omega)$',fontsize=18)
+    ax[1].set_xlabel('$\\omega$ (eV)',fontsize=16)
+    ax[0].set_ylabel('$\\mathrm{Re}~\\alpha(\\omega)$',fontsize=16)
+    ax[1].set_ylabel('$\\mathrm{Im}~\\alpha(\\omega)$',fontsize=16)
     ax[0].yaxis.set_major_locator(MultipleLocator(.2))
     ax[0].yaxis.set_minor_locator(MultipleLocator(.1))
     ax[1].yaxis.set_major_locator(MultipleLocator(.1))
     ax[1].yaxis.set_minor_locator(MultipleLocator(.05))
     for i in range(2):
         #ax[i].set_xticks(np.arange(0.0,om.max(),10))
-        ax[i].set_xlim([0.0,om.max()])
+        ax[i].set_xlim([0.0,400])#om.max()])
         ax[i].tick_params(axis='both',labelsize=14)
-        ax[i].xaxis.set_major_locator(MultipleLocator(10))
-        ax[i].xaxis.set_minor_locator(MultipleLocator(5))
+        ax[i].xaxis.set_major_locator(MultipleLocator(50))
+        ax[i].xaxis.set_minor_locator(MultipleLocator(25))
+    plt.suptitle('Si, r$^2$SCAN density',fontsize=16)
     #plt.show()
-    plt.savefig('./Si_alpha_omega.png',dpi=600,bbox_inches='tight')
+    plt.savefig('./Si_alpha_omega.pdf',dpi=600,bbox_inches='tight')
     return
 
 if __name__=="__main__":
 
-    #calc_alpha(sph_avg=False,fxc='MCP07')
-    plotter(sph_avg=False,fxc=['DLDA','MCP07'])
+    #calc_alpha(sph_avg=False,fxc='DLDA')
+    plotter(sph_avg=False,fxc=['DLDA','MCP07_k0','MCP07'])

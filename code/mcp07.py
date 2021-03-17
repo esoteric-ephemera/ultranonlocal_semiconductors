@@ -129,7 +129,7 @@ def chi_parser(z,omega,ixn,rs,wfxc,reduce_omega=False,imag_freq=False,ret_eps=Fa
 
     return chi
 
-def mcp07_dynamic(q,omega,dv,axis='real',revised=False,pars={},param='PZ81'):
+def mcp07_dynamic(q,omega,dv,axis='real',revised=False,pars={},param='PZ81',no_k=False):
 
     fxc_q,f0,akn = mcp07_static(q,dv,param=param)
     if revised:
@@ -148,6 +148,11 @@ def mcp07_dynamic(q,omega,dv,axis='real',revised=False,pars={},param='PZ81'):
         fxc = (1.0 + np.exp(-(q/kscr)**2)*(fxc_omega/f0 - 1.0))*fxc_q
     else:
         fxc_omega = gki_dynamic(dv,omega,axis=axis,revised=revised,param=param,use_par=True)
+        if no_k:
+            if hasattr(akn,'__len__'):
+                akn = np.zeros(akn.shape)
+            else:
+                akn = 0.0
         fxc = (1.0 + np.exp(-akn*q**2)*(fxc_omega/f0 - 1.0))*fxc_q
 
     return fxc
