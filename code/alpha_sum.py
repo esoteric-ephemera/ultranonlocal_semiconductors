@@ -9,6 +9,8 @@ from discrete_ft_n import oflnm as ft_dens_file
 from gauss_quad import gauss_quad
 from mcp07 import chi_parser,mcp07_dynamic,gki_dynamic_real_freq
 
+clist=['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:olive','tab:gray']
+
 def get_len(vec):
     return np.sum(vec**2)**(0.5)
 
@@ -117,7 +119,7 @@ def plotter(sph_avg=False,fxc=[]):
     fig,ax = plt.subplots(2,1,figsize=(8,6))
     max_bd = 0.0
     min_bd = 0.0
-    for anfxc in fxc:
+    for ifxc,anfxc in enumerate(fxc):
         if sph_avg:
             flnm = './alpha_omega_sph_avg_'+anfxc+'.csv'
         else:
@@ -131,11 +133,14 @@ def plotter(sph_avg=False,fxc=[]):
             lbl = 'MCP07, $\\bar{k}=0$'
         else:
             lbl = anfxc
-        ax[0].plot(om,alp_re)
-        ax[1].plot(om,alp_im,label=lbl)
+        ax[0].plot(om,alp_re,color=clist[ifxc])
+        ax[1].plot(om,alp_im,label=lbl,color=clist[ifxc])
         max_bd = max([max_bd,alp_re.max()])
         min_bd = min([min_bd,alp_im.min()])
-    ax[1].legend(fontsize=14)
+        wind = np.argmin(np.abs(om - 200))
+
+        ax[0].annotate(lbl,(200.0,alp_re[wind]-.1),color=clist[ifxc],fontsize=12)
+    #ax[1].legend(fontsize=14)
     #ax[0].set_yticks(np.arange(0.0,max_bd,.1))
     #ax[1].set_yticks(np.arange(0.0,min_bd,-.1))
     ax[0].set_ylim([0.0,ax[0].get_ylim()[1]])
