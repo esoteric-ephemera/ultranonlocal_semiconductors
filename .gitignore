@@ -2,5 +2,5 @@
 ./*/DS_Store
 __pycache__
 tmp.sh
-./Si/POTCAR
-./Si/r2scan/POTCAR
+Si/POTCAR
+Si/r2scan/POTCAR
