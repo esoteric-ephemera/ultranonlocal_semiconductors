@@ -9,8 +9,6 @@ from discrete_ft_n import oflnm as ft_dens_file
 from gauss_quad import gauss_quad
 from mcp07 import chi_parser,mcp07_dynamic,gki_dynamic_real_freq
 
-clist=['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:olive','tab:gray']
-
 def get_len(vec):
     return np.sum(vec**2)**(0.5)
 
@@ -58,7 +56,7 @@ def wrap_kernel(q,omega,n,wfxc):
         raise ValueError('Unknown XC kernel, ', wfxc)
     return fxc
 
-def calc_alpha(sph_avg=False,fxc='MCP07'):
+def calc_alpha(fxcl,sph_avg=False):
     """ setting magnitude of |q|<<1 """
     q = 1.e-5
     dftn = np.genfromtxt(ft_dens_file,delimiter=',',skip_header=1)
@@ -67,103 +65,150 @@ def calc_alpha(sph_avg=False,fxc='MCP07'):
     ng0 = np.zeros(dftn.shape[0],dtype='complex')
     ng0.real = dftn[:,3]
     ng0.imag = dftn[:,4]
-    """   first find the index of the zero wavevector """
-    for iag,ag in enumerate(g):
-        if get_len(ag)==0.0:
-            """ n(g=0) is the average value of n(r)  """
-            n_avg2 = np.abs(ng0[iag])**2
-            break
-    """ remove the zero-wavevector component from the sum  """
-    ng0 = np.delete(ng0,iag,axis=0)
-    ng02 = np.abs(ng0)**2
-    g = np.delete(g,iag,axis=0)
+    """
+    import matplotlib.pyplot as plt
     gmod = (g[:,0]**2 + g[:,1]**2 + g[:,2]**2)**(0.5)
-    Ng = g.shape[0]
-    """ only need to evaluate zero-frequency term once   """
-    fxc_g0 = wrap_kernel(gmod,np.zeros(Ng),np.abs(ng0),fxc)
+    srt_ind = np.argsort(gmod)
+    en = gmod[srt_ind]**2/2*Eh_to_eV
+    plt.plot(en,np.abs(ng0[srt_ind].real),label='$|\\mathrm{Re} ~n(\\vec G)|$')
+    plt.plot(en,np.abs(ng0[srt_ind].imag),label='$|\\mathrm{Im} ~n(\\vec G)|$')
+    #plt.plot(en,np.abs(ng0[srt_ind]),label='$|n(\\vec G)|$')
+    plt.xlabel('$E_{\\mathrm{cut}}$ (eV)',fontsize=14)
+    plt.legend(fontsize=14)
+    plt.xlim([0.0,en.max()])
+    plt.yscale('log')
+    plt.show()
+    exit()
+    """
 
-    omega_l = np.arange(0.01,50,0.05)
-    alpha = np.zeros(omega_l.shape[0],dtype='complex')
 
-    if sph_avg:
-        ofl = './alpha_omega_sph_avg_'+fxc+'.csv'
-        """ also only need to evaluate g_vec . q_hat once  """
-        q_hat,intwg = init_ang_grid()
-        Nq = q_hat.shape[0]
-        g_dot_q_hat = np.zeros((Ng,Nq))
-        for iag,ag in enumerate(g):
-            g_dot_q_hat[iag] = (np.matmul(q_hat,ag))**2
-        #n_avg = np.sum(ng0)/ng0.shape[0]
-        #ng0 = ng0**2
-        for iom,om in enumerate(omega_l):
-            fxc_g = wrap_kernel(gmod,om,np.abs(ng0),fxc)
-            fxc_diff = fxc_g - fxc_g0
-            for iag in range(Ng):
-                alpha[iom] += np.sum(intwg*g_dot_q_hat[iag]*fxc_diff[iag]*ng02[iag])/n_avg2
-    else:
-        ofl = './alpha_omega_'+fxc+'.csv'
+    """   first find the index of the zero wavevector """
+    """
+    for iag,ag in enumerate(g):
+        # using FFT, first entry is (0,0,0)
+        if get_len(ag)==0.0:
+            # n(g=0) is the average value of n(r)
+            n_avg2 = np.abs(ng0[iag])**2
+            print(('average density {:} bohr**(-3)').format(n_avg2))
+            break
+    """
+    # using FFT, first entry is (0,0,0)
+    n_avg2 = np.abs(ng0[0])**2
+    print(('average density {:} bohr**(-3)').format(n_avg2))
+    """ remove the zero-wavevector component from the sum  """
+    ng0 = ng0[1:]#np.delete(ng0,iag,axis=0)
+    ng02 = np.abs(ng0)**2
+    g = g[1:]#np.delete(g,iag,axis=0)
+    gmod = (g[:,0]**2 + g[:,1]**2 + g[:,2]**2)**(0.5)
+    if not sph_avg:
         g_dot_q_hat = gmod**2
-        intwg = 1.0/3.0
-        for iom,om in enumerate(omega_l):
-            fxc_g = wrap_kernel(gmod,om,np.abs(ng0),fxc)
-            fxc_diff = fxc_g - fxc_g0
-            alpha[iom] = intwg*np.sum(g_dot_q_hat*fxc_diff*ng02)/n_avg2
+
+    Ng = g.shape[0]
+    omega_l = np.arange(0.01,10.0,0.01)/Eh_to_eV#np.arange(0.01,50,0.05)
+
+    for fxc in fxcl:
+
+        """ only need to evaluate zero-frequency term once   """
+        fxc_g0 = wrap_kernel(gmod,np.zeros(Ng),np.abs(ng0),fxc)#n_avg2**(0.5)*np.ones(gmod.shape[0]),fxc)#
+
+        alpha = np.zeros(omega_l.shape[0],dtype='complex')
+
+        if sph_avg:
+            ofl = './alpha_omega_sph_avg_'+fxc+'.csv'
+            """ also only need to evaluate g_vec . q_hat once  """
+            q_hat,intwg = init_ang_grid()
+            Nq = q_hat.shape[0]
+            g_dot_q_hat = np.zeros((Ng,Nq))
+            for iag,ag in enumerate(g):
+                g_dot_q_hat[iag] = (np.matmul(q_hat,ag))**2
+            #n_avg = np.sum(ng0)/ng0.shape[0]
+            #ng0 = ng0**2
+            for iom,om in enumerate(omega_l):
+                fxc_g = wrap_kernel(gmod,om,np.abs(ng0),fxc)
+                fxc_diff = fxc_g - fxc_g0
+                for iag in range(Ng):
+                    alpha[iom] += np.sum(intwg*g_dot_q_hat[iag]*fxc_diff[iag]*ng02[iag])/n_avg2
+        else:
+            ofl = './alpha_omega_'+fxc+'.csv'
+            intwg = 1.0/3.0
+            for iom,om in enumerate(omega_l):
+                fxc_g = wrap_kernel(gmod,om,np.abs(ng0),fxc)#n_avg2**(0.5)*np.ones(gmod.shape[0]),fxc)#
+                fxc_diff = fxc_g - fxc_g0
+                alpha[iom] = intwg*np.sum(g_dot_q_hat*fxc_diff*ng02)/n_avg2
 
 
-    np.savetxt(ofl,np.transpose((omega_l,alpha.real,alpha.imag)),delimiter=',',header='omega (a.u.), Re alpha(w), Im alpha(w)',fmt='%.18f')
+        np.savetxt(ofl,np.transpose((omega_l,alpha.real,alpha.imag)),delimiter=',',header='omega (a.u.), Re alpha(w), Im alpha(w)',fmt='%.18f')
 
     return
 
-def plotter(sph_avg=False,fxc=[]):
+def plotter(fxcl,sph_avg=False):
 
+    clist=['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:olive','tab:gray']
+    line_styles=['-','--','-.']
+
+    olim = 10
     fig,ax = plt.subplots(2,1,figsize=(8,6))
     max_bd = 0.0
     min_bd = 0.0
-    for ifxc,anfxc in enumerate(fxc):
+    alp_re = {}
+    alp_im = {}
+    om = {}
+    for ifxc,anfxc in enumerate(fxcl):
         if sph_avg:
             flnm = './alpha_omega_sph_avg_'+anfxc+'.csv'
         else:
             flnm = './alpha_omega_'+anfxc+'.csv'
 
-        om,alp_re,alp_im = np.transpose(np.genfromtxt(flnm,delimiter=',',skip_header=1))
-        om*=Eh_to_eV
+        om[anfxc],alp_re[anfxc],alp_im[anfxc] = np.transpose(np.genfromtxt(flnm,delimiter=',',skip_header=1))
+        om[anfxc]*=Eh_to_eV
+        mask = om[anfxc]<=olim
+        om[anfxc] = om[anfxc][mask]
+        alp_re[anfxc] = alp_re[anfxc][mask]
+        alp_im[anfxc] = alp_im[anfxc][mask]
+
+        ax[0].plot(om[anfxc],alp_re[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc])
+        ax[1].plot(om[anfxc],alp_im[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc])
+        max_bd = max([max_bd,alp_re[anfxc].max()])
+        min_bd = min([min_bd,alp_im[anfxc].min()])
+
+    ax[0].set_ylim([0.0,max_bd])#ax[0].get_ylim()[1]])
+    ax[1].set_ylim([min_bd,0.0])
+    ax[1].set_xlabel('$\\omega$ (eV)',fontsize=16)
+    ax[0].set_ylabel('$\\mathrm{Re}~\\alpha(\\omega)$',fontsize=16)
+    ax[1].set_ylabel('$\\mathrm{Im}~\\alpha(\\omega)$',fontsize=16)
+    ax[0].yaxis.set_major_locator(MultipleLocator(.5))
+    ax[0].yaxis.set_minor_locator(MultipleLocator(.25))
+    ax[1].yaxis.set_major_locator(MultipleLocator(.2))
+    ax[1].yaxis.set_minor_locator(MultipleLocator(.1))
+    for i in range(2):
+        ax[i].set_xlim([0.0,olim])#om.max()])
+        ax[i].tick_params(axis='both',labelsize=14)
+        ax[i].xaxis.set_major_locator(MultipleLocator(2))
+        ax[i].xaxis.set_minor_locator(MultipleLocator(1))
+    ax[0].xaxis.set_ticklabels([' ' for i in ax[0].xaxis.get_major_ticks()])
+    ax[0].tick_params(axis='y',labelsize=14)
+    plt.suptitle('Si, r$^2$SCAN density',fontsize=16)
+    for ifxc,anfxc in enumerate(fxcl):
+        offset = 0.1
         if anfxc == 'DLDA':
             lbl = 'Dynamic LDA'
         elif anfxc == 'MCP07_k0':
             lbl = 'MCP07, $\\bar{k}=0$'
         else:
             lbl = anfxc
-        ax[0].plot(om,alp_re,color=clist[ifxc])
-        ax[1].plot(om,alp_im,label=lbl,color=clist[ifxc])
-        max_bd = max([max_bd,alp_re.max()])
-        min_bd = min([min_bd,alp_im.min()])
-        wind = np.argmin(np.abs(om - 200))
+            offset = 0.05
+        wind = np.argmin(np.abs(om[anfxc] - 0.6*olim))
+        p2 = ax[0].transData.transform_point((om[anfxc][wind+1],alp_re[anfxc][wind+1]))
+        p1 = ax[0].transData.transform_point((om[anfxc][wind-1],alp_re[anfxc][wind-1]))
+        angle = 180/pi*np.arctan((p2[1]-p1[1])/(p2[0]-p1[0]))
 
-        ax[0].annotate(lbl,(200.0,alp_re[wind]-.1),color=clist[ifxc],fontsize=12)
-    #ax[1].legend(fontsize=14)
-    #ax[0].set_yticks(np.arange(0.0,max_bd,.1))
-    #ax[1].set_yticks(np.arange(0.0,min_bd,-.1))
-    ax[0].set_ylim([0.0,ax[0].get_ylim()[1]])
-    ax[1].set_ylim([ax[1].get_ylim()[0],0.0])
-    ax[1].set_xlabel('$\\omega$ (eV)',fontsize=16)
-    ax[0].set_ylabel('$\\mathrm{Re}~\\alpha(\\omega)$',fontsize=16)
-    ax[1].set_ylabel('$\\mathrm{Im}~\\alpha(\\omega)$',fontsize=16)
-    ax[0].yaxis.set_major_locator(MultipleLocator(.2))
-    ax[0].yaxis.set_minor_locator(MultipleLocator(.1))
-    ax[1].yaxis.set_major_locator(MultipleLocator(.1))
-    ax[1].yaxis.set_minor_locator(MultipleLocator(.05))
-    for i in range(2):
-        #ax[i].set_xticks(np.arange(0.0,om.max(),10))
-        ax[i].set_xlim([0.0,400])#om.max()])
-        ax[i].tick_params(axis='both',labelsize=14)
-        ax[i].xaxis.set_major_locator(MultipleLocator(50))
-        ax[i].xaxis.set_minor_locator(MultipleLocator(25))
-    plt.suptitle('Si, r$^2$SCAN density',fontsize=16)
+        ax[0].annotate(lbl,(0.6*olim,alp_re[anfxc][wind]+offset),color=clist[ifxc],fontsize=12,rotation=angle)
     #plt.show()
+    #exit()
     plt.savefig('./Si_alpha_omega.pdf',dpi=600,bbox_inches='tight')
     return
 
 if __name__=="__main__":
 
-    #calc_alpha(sph_avg=False,fxc='DLDA')
-    plotter(sph_avg=False,fxc=['DLDA','MCP07_k0','MCP07'])
+    #calc_alpha(['DLDA','MCP07_k0','MCP07'],sph_avg=False)
+    plotter(['MCP07','MCP07_k0','DLDA'],sph_avg=False)
