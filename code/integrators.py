@@ -179,6 +179,10 @@ def nquad(fun,ttbd,method,opts,pars_ops={},args=(),kwargs={}):
 #-------------------------------------------------------------------------------
 
     if 'PV' in pars_ops: # for handling numeric principal value integrals
+        if 'prec' in opts:
+            opts['prec']/=len(pars_ops['PV'])+1
+        else:
+            opts['prec']=1.e-6/(len(pars_ops['PV'])+1)
         eps = 1.e-12
         if 'PV_eps' in pars_ops: # if the tolerance on epsilon is too tight, or too loose
             eps = pars_ops['PV_eps'] # can be set via pars_ops

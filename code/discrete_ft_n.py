@@ -1,8 +1,12 @@
 import numpy as np
 from itertools import product
 
-from constants import pi,Eh_to_eV,bohr_to_ang
-density_file = './r2_scan_si_equilibrium_density.csv'
+from constants import crystal,pi,Eh_to_eV,bohr_to_ang
+
+if crystal == 'C':
+    density_file = './C_r2scan_density.csv'
+elif crystal == 'Si':
+    density_file = './r2_scan_si_equilibrium_density.csv'
 oflnm = density_file.split('.csv')[0]+'_dft.csv'
 
 def get_len(vec,scalar=True):
@@ -33,7 +37,7 @@ def dft_cut(r,fr,rlv,nx,ny,nz,cut):
 """
 def dft_cut(r,ifr,rlv,nx,ny,nz,cut):
     fr = np.reshape(ifr,(nx,ny,nz),order='F')
-    fg = (nx*ny*nz)*np.fft.ifftn(fr) # want same phase convention as in VASP
+    fg = np.fft.ifftn(fr) # want same phase convention as in VASP
     fg = np.reshape(fg,(nx*ny*nz),order='F')
     inds_x = nx*np.fft.fftfreq(nx)
     if ny == nx:
@@ -52,7 +56,7 @@ def dft_cut(r,ifr,rlv,nx,ny,nz,cut):
     mask = get_len(gl,scalar=False) < cut
     gl = gl[mask]
     fg = fg[mask]
-    fg/=fg.shape[0]
+    #fg/=fg.shape[0]
     return gl,fg
 
 def dft_n():
@@ -91,7 +95,6 @@ def dft_n():
     n = dens[:,3]
     gv,ng = dft_cut(r,n,rlv,nx,ny,nz,2*gcut)
     ng *= bohr_to_ang**3
-
     np.savetxt(oflnm,np.transpose((gv[:,0],gv[:,1],gv[:,2],ng.real,ng.imag)),delimiter=',',header='gx (bohr),gy,gz,Re n(g_vec) (1/bohr**3), Im n(g_vec)')
 
     return
