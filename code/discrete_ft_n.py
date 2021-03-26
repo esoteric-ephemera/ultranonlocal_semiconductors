@@ -15,26 +15,6 @@ def get_len(vec,scalar=True):
     else:
         return (vec[:,0]**2 + vec[:,1]**2 + vec[:,2]**2)**(0.5)
 
-"""
-def dft_cut(r,fr,rlv,nx,ny,nz,cut):
-    xbd = (nx-nx%2)/2
-    ybd = (ny-ny%2)/2
-    zbd = (nz-nz%2)/2
-    gxl = np.arange(-xbd,xbd,1)
-    gyl = np.arange(-ybd,ybd,1)
-    gzl = np.arange(-zbd,zbd,1)
-    fg = np.zeros(0,dtype='complex')
-    gl = np.zeros((0,3))
-    for ivec,gvec in enumerate(product(gxl,gyl,gzl)):
-        g = gvec[0]*rlv[0] + gvec[1]*rlv[1] + gvec[2]*rlv[2]
-        # we could use an FFT here, but we only need to use reciprocal lattice vectors below the cutoff
-        if get_len(g) < cut:
-            fac = np.exp(-1.j*np.matmul(r,g))
-            fg = np.append(fg,np.sum(fr*fac))#/(nx*ny*nz)
-            gl = np.vstack((gl,g))
-    fg/=fg.shape[0]
-    return gl,fg
-"""
 def dft_cut(r,ifr,rlv,nx,ny,nz,cut):
     fr = np.reshape(ifr,(nx,ny,nz),order='F')
     fg = np.fft.ifftn(fr) # want same phase convention as in VASP
@@ -56,7 +36,6 @@ def dft_cut(r,ifr,rlv,nx,ny,nz,cut):
     mask = get_len(gl,scalar=False) < cut
     gl = gl[mask]
     fg = fg[mask]
-    #fg/=fg.shape[0]
     return gl,fg
 
 def dft_n():

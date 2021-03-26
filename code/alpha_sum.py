@@ -61,17 +61,14 @@ def wrap_kernel(q,omega,n,wfxc):
         raise ValueError('Unknown XC kernel, ', wfxc)
     return fxc
 
-def calc_alpha(fxcl,sph_avg=False):
-    """ setting magnitude of |q|<<1 """
-    q = 1.e-5
+def plot_fourier_components():
+
     dftn = np.genfromtxt(ft_dens_file,delimiter=',',skip_header=1)
     g = dftn[:,:3]
 
     ng0 = np.zeros(dftn.shape[0],dtype='complex')
     ng0.real = dftn[:,3]
     ng0.imag = dftn[:,4]
-    """
-    import matplotlib.pyplot as plt
     gmod = (g[:,0]**2 + g[:,1]**2 + g[:,2]**2)**(0.5)
     srt_ind = np.argsort(gmod)
     en = gmod[srt_ind]**2/2*Eh_to_eV
@@ -83,28 +80,35 @@ def calc_alpha(fxcl,sph_avg=False):
     plt.xlim([0.0,en.max()])
     plt.yscale('log')
     plt.show()
-    exit()
-    """
+    return
 
+def calc_alpha(fxcl,sph_avg=False):
 
-    """   first find the index of the zero wavevector """
-    """
-    for iag,ag in enumerate(g):
+    dftn = np.genfromtxt(ft_dens_file,delimiter=',',skip_header=1)
+    g = dftn[:,:3]
+
+    ng0 = np.zeros(dftn.shape[0],dtype='complex')
+    ng0.real = dftn[:,3]
+    ng0.imag = dftn[:,4]
+
+    #   first find the index of the zero wavevector
+    if get_len(g[0])==0.0:
         # using FFT, first entry is (0,0,0)
-        if get_len(ag)==0.0:
-            # n(g=0) is the average value of n(r)
-            n_avg2 = np.abs(ng0[iag])**2
-            print(('average density {:} bohr**(-3)').format(n_avg2))
-            break
-    """
-    # using FFT, first entry is (0,0,0)
-    n_avg2 = np.abs(ng0[0])**2
+        n_avg2 = np.abs(ng0[0])**2
+        # remove the zero-wavevector component from the sum
+        ng0 = ng0[1:]
+        g = g[1:]
+    else:
+        for iag,ag in enumerate(g):
+            if get_len(ag)==0.0:
+                n_avg2 = np.abs(ng0[iag])**2
+                ng0 = np.delete(ng0,iag,axis=0)
+                g = np.delete(g,iag,axis=0)
+                break
     print(('average density {:} bohr**(-3); rs_avg = {:} bohr').format(n_avg2**(0.5),(3.0/(4*pi*n_avg2**(0.5)))**(1/3)))
-    """ remove the zero-wavevector component from the sum  """
-    ng0 = ng0[1:]#np.delete(ng0,iag,axis=0)
     ng02 = np.abs(ng0)**2
-    g = g[1:]#np.delete(g,iag,axis=0)
     gmod = (g[:,0]**2 + g[:,1]**2 + g[:,2]**2)**(0.5)
+
     if not sph_avg:
         g_dot_q_hat = gmod**2
 
@@ -125,21 +129,20 @@ def calc_alpha(fxcl,sph_avg=False):
 
     for fxc in fxcl:
 
-        """ only need to evaluate zero-frequency term once   """
-        fxc_g0 = wrap_kernel(gmod,0.0,n_avg2**(0.5),fxc)#np.abs(ng0),fxc)#n_avg2**(0.5)*np.ones(gmod.shape[0]),fxc)#
+        # only need to evaluate zero-frequency term once
+        fxc_g0 = wrap_kernel(gmod,0.0,n_avg2**(0.5),fxc)
 
         alpha = np.zeros(omega_l.shape[0],dtype='complex')
 
         if sph_avg:
             ofl = './alpha_omega_sph_avg_'+fxc+addn+'.csv'
-            """ also only need to evaluate g_vec . q_hat once  """
+            # also only need to evaluate g_vec . q_hat once
             q_hat,intwg = init_ang_grid()
             Nq = q_hat.shape[0]
             g_dot_q_hat = np.zeros((Ng,Nq))
             for iag,ag in enumerate(g):
                 g_dot_q_hat[iag] = (np.matmul(q_hat,ag))**2
-            #n_avg = np.sum(ng0)/ng0.shape[0]
-            #ng0 = ng0**2
+
             for iom,om in enumerate(omega_l):
                 fxc_g = wrap_kernel(gmod,om,np.abs(ng0),fxc)
                 fxc_diff = fxc_g - fxc_g0
@@ -149,7 +152,7 @@ def calc_alpha(fxcl,sph_avg=False):
             ofl = './alpha_omega_'+fxc+addn+'.csv'
             intwg = 1.0/3.0
             for iom,om in enumerate(omega_l):
-                fxc_g = wrap_kernel(gmod,om,n_avg2**(0.5),fxc)#np.abs(ng0),fxc)#
+                fxc_g = wrap_kernel(gmod,om,n_avg2**(0.5),fxc)
                 fxc_diff = fxc_g - fxc_g0
                 alpha[iom] = intwg*np.sum(g_dot_q_hat*fxc_diff*ng02)/n_avg2
 
@@ -201,9 +204,8 @@ def plotter(fxcl,sph_avg=False):
     if 'QV' in fxcl:
         ax[0].set_ylim([1.1*alp_re['QV'].min(),1.05*max_bd])
         ax[1].set_ylim([1.05*min_bd,0.0])
-        #ax[0].hlines(0.0,ax[0].get_xlim()[0],ax[0].xlim()[1],linestyle='-',color='gray')
     else:
-        ax[0].set_ylim([0.0,1.05*max_bd])#ax[0].get_ylim()[1]])
+        ax[0].set_ylim([0.0,1.05*max_bd])
         ax[1].set_ylim([1.05*min_bd,0.0])
     ax[1].set_xlabel('$\\omega$ (eV)',fontsize=16)
     ax[0].set_ylabel('$\\mathrm{Re}~\\alpha(\\omega)$',fontsize=16)
@@ -261,6 +263,8 @@ def plotter(fxcl,sph_avg=False):
     return
 
 if __name__=="__main__":
+    #plot_fourier_components()
+    #exit()
 
     calc_alpha(['DLDA','MCP07_k0','MCP07'],sph_avg=False)
     if crystal == 'Si':
