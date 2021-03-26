@@ -33,7 +33,7 @@ def metal_plots():
 
     olim = 10
     for sol in ['Al','Na']:
-        fig,ax = plt.subplots(2,1,figsize=(8,4))
+        fig,ax = plt.subplots(2,1,figsize=(8,6))
         max_bd = 0.0
         min_bd = 0.0
 
@@ -83,6 +83,7 @@ def metal_plots():
                 offset = 0.01
             angle = 180/pi*np.arctan((p2[1]-p1[1])/(p2[0]-p1[0]))
             ax[0].annotate(lbl,(olim/2,alp_re[fxc][wind]+offset),color=clist[ifxc],fontsize=12,rotation=angle)
+        plt.subplots_adjust(top=.93)
         #plt.show()
         #exit()
         plt.savefig('./'+sol+'_alpha_omega.pdf',dpi=600,bbox_inches='tight')

@@ -10,7 +10,7 @@ from gauss_quad import gauss_quad
 from mcp07 import chi_parser,mcp07_dynamic,gki_dynamic_real_freq
 from qian_vignale_fxc import fxc_longitudinal as qv_fxc
 
-bigrange = False
+bigrange = True
 
 def get_len(vec):
     return np.sum(vec**2)**(0.5)
@@ -257,6 +257,7 @@ def plotter(fxcl,sph_avg=False):
         angle = 180/pi*np.arctan((p2[1]-p1[1])/(p2[0]-p1[0]))
 
         ax[0].annotate(lbl,(0.6*olim,alp_re[anfxc][wind]+offset),color=clist[ifxc],fontsize=12,rotation=angle)
+    plt.subplots_adjust(top=.93)
     #plt.show()
     #exit()
     plt.savefig('./{:}_alpha_omega'.format(crystal)+addn+'.pdf',dpi=600,bbox_inches='tight')
@@ -268,6 +269,9 @@ if __name__=="__main__":
 
     calc_alpha(['DLDA','MCP07_k0','MCP07'],sph_avg=False)
     if crystal == 'Si':
-        plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False)
+        if bigrange:
+            plotter(['MCP07','MCP07_k0','DLDA'],sph_avg=False)
+        else:
+            plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False)
     else:
         plotter(['MCP07','MCP07_k0','DLDA'],sph_avg=False)
