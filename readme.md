@@ -15,5 +15,6 @@ was used with options:
 
 **metal_data** contains jellium data and pseudopotential perturbative data for Na and Al
 
-**Si** contains VASP data for Si. For copyright reasons, POTCAR files cannot be included. The pseudopotential used was
+**Si** contains VASP data for Si, and **C** contains VASP data for for C. For copyright reasons, POTCAR files cannot be included. The pseudopotentials used were
 *PAW_PBE Si 05Jan2001*
+*PAW_PBE C 08Apr2002*
