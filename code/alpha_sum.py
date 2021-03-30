@@ -11,7 +11,7 @@ from gauss_quad import gauss_quad
 from mcp07 import chi_parser,mcp07_dynamic,gki_dynamic_real_freq
 from qian_vignale_fxc import fxc_longitudinal as qv_fxc
 
-bigrange = True
+bigrange = False
 use_multiprocesing = True
 
 def get_len(vec):
@@ -325,9 +325,6 @@ if __name__=="__main__":
 
     calc_alpha(['QV','DLDA','MCP07_k0','MCP07'],sph_avg=False)
     if crystal == 'Si':
-        if bigrange:
-            plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False)
-        else:
-            plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False)
+        plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False)
     else:
-        plotter(['MCP07','MCP07_k0','DLDA'],sph_avg=False)
+        plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False)
