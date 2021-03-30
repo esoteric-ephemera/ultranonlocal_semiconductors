@@ -356,16 +356,26 @@ def gki_dynamic_real_freq(dv,u,x_only=False,revised=False,param='PZ81',dimension
         h_mag = ((1.0 + fac*xk.real**2-fac*xk.imag**2)**2 + (2*fac*xk.real*xk.imag)**2)**(0.5)
         hx /= (1.0 + (h0*aj)**(4.0/7.0)*xk**2)**(7.0/4.0)
 
+    isscalar=False
     if not hasattr(u,'__len__'):
-        fxcu = np.zeros(dv['rs'].shape,dtype=complex)
+        if hasattr(dv['rs'],'__len__'):
+            fxcu = np.zeros(dv['rs'].shape,dtype=complex)
+        else:
+            isscalar=True
     else:
         fxcu = np.zeros(u.shape,dtype=complex)
     if dimensionless:
-        fxcu.real = hx
-        fxcu.imag = gx
+        if isscalar:
+            fxcu = hx + 1.j*gx
+        else:
+            fxcu.real = hx
+            fxcu.imag = gx
     else:
-        fxcu.real = finf - cc*bn**(3.0/4.0)*hx
-        fxcu.imag = -cc*bn**(3.0/4.0)*gx
+        if isscalar:
+            fxcu = finf - cc*bn**(3.0/4.0)*hx -cc*bn**(3.0/4.0)*gx*1.j
+        else:
+            fxcu.real = finf - cc*bn**(3.0/4.0)*hx
+            fxcu.imag = -cc*bn**(3.0/4.0)*gx
     return fxcu
 
 def gki_dynamic(dv,u,axis='real',x_only=False,revised=False,param='PZ81',use_par=False):

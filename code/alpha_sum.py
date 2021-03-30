@@ -1,6 +1,7 @@
 import numpy as np
 from os import path
 from itertools import product
+import multiprocessing as mp
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 
@@ -11,6 +12,7 @@ from mcp07 import chi_parser,mcp07_dynamic,gki_dynamic_real_freq
 from qian_vignale_fxc import fxc_longitudinal as qv_fxc
 
 bigrange = True
+use_multiprocesing = True
 
 def get_len(vec):
     return np.sum(vec**2)**(0.5)
@@ -84,6 +86,8 @@ def plot_fourier_components():
 
 def calc_alpha(fxcl,sph_avg=False):
 
+    dyn_only_regex = ['DLDA','QV']
+
     dftn = np.genfromtxt(ft_dens_file,delimiter=',',skip_header=1)
     g = dftn[:,:3]
 
@@ -94,6 +98,7 @@ def calc_alpha(fxcl,sph_avg=False):
     #   first find the index of the zero wavevector
     if get_len(g[0])==0.0:
         # using FFT, first entry is (0,0,0)
+        n_0_bar = np.abs(ng0[0])
         n_avg2 = np.abs(ng0[0])**2
         # remove the zero-wavevector component from the sum
         ng0 = ng0[1:]
@@ -101,11 +106,12 @@ def calc_alpha(fxcl,sph_avg=False):
     else:
         for iag,ag in enumerate(g):
             if get_len(ag)==0.0:
+                n_0_bar = np.abs(ng0[iag])
                 n_avg2 = np.abs(ng0[iag])**2
                 ng0 = np.delete(ng0,iag,axis=0)
                 g = np.delete(g,iag,axis=0)
                 break
-    print(('average density {:} bohr**(-3); rs_avg = {:} bohr').format(n_avg2**(0.5),(3.0/(4*pi*n_avg2**(0.5)))**(1/3)))
+    print(('average density {:} bohr**(-3); rs_avg = {:} bohr').format(n_0_bar,(3.0/(4*pi*n_0_bar))**(1/3)))
     ng02 = np.abs(ng0)**2
     gmod = (g[:,0]**2 + g[:,1]**2 + g[:,2]**2)**(0.5)
 
@@ -114,13 +120,13 @@ def calc_alpha(fxcl,sph_avg=False):
 
     Ng = g.shape[0]
     if bigrange:
-        omega_l = np.linspace(0.01,400.02,500)/Eh_to_eV
+        omega_l = np.linspace(0.0,400.0,500)/Eh_to_eV
     else:
         if crystal == 'Si':
             ulim = 25.0
         elif crystal == 'C':
             ulim = 25.0
-        omega_l = np.linspace(0.01,ulim,500)/Eh_to_eV
+        omega_l = np.linspace(0.0,ulim,500)/Eh_to_eV
 
     if bigrange:
         addn = '_bigrange'
@@ -129,8 +135,24 @@ def calc_alpha(fxcl,sph_avg=False):
 
     for fxc in fxcl:
 
+        if fxc == 'QV' and use_multiprocesing:
+            nproc = 4
+        else:
+            nproc = 1
+
         # only need to evaluate zero-frequency term once
-        fxc_g0 = wrap_kernel(gmod,0.0,n_avg2**(0.5),fxc)
+        if fxc in dyn_only_regex:
+            fxc_g0 = wrap_kernel(0.0,0.0,n_0_bar,fxc)
+        else:
+            if nproc == 1:
+                fxc_g0 = wrap_kernel(gmod,0.0,n_0_bar,fxc)
+            else:
+                pool = mp.Pool(processes=nproc)
+                fxc_g0_tmp = pool.starmap(wrap_kernel,product(gmod,[0.0],[n_0_bar],[fxc]))
+                pool.close()
+                fxc_g0 = np.zeros(Ng,dtype='complex')
+                for ifxcg in range(Ng):
+                    fxc_g0[ifxcg] = fxc_g0_tmp[ifxcg]
 
         alpha = np.zeros(omega_l.shape[0],dtype='complex')
 
@@ -144,16 +166,50 @@ def calc_alpha(fxcl,sph_avg=False):
                 g_dot_q_hat[iag] = (np.matmul(q_hat,ag))**2
 
             for iom,om in enumerate(omega_l):
-                fxc_g = wrap_kernel(gmod,om,np.abs(ng0),fxc)
+                if fxc in dyn_only_regex:
+                    fxc_g = wrap_kernel(0.0,om,n_0_bar,fxc)*np.ones(Ng)
+                else:
+                    if nproc == 1:
+                        fxc_g = wrap_kernel(gmod,om,n_0_bar,fxc)
+                    else:
+                        pool = mp.Pool(processes=nproc)
+                        fxc_g_tmp = pool.starmap(wrap_kernel,product(gmod,[om],[n_0_bar],[fxc]))
+                        pool.close()
+                        fxc_g = np.zeros(Ng,dtype='complex')
+                        for ifxcg in range(Ng):
+                            fxc_g[ifxcg] = fxc_g_tmp[ifxcg]
                 fxc_diff = fxc_g - fxc_g0
                 for iag in range(Ng):
                     alpha[iom] += np.sum(intwg*g_dot_q_hat[iag]*fxc_diff[iag]*ng02[iag])/n_avg2
         else:
             ofl = './alpha_omega_'+fxc+addn+'.csv'
             intwg = 1.0/3.0
+            if fxc in dyn_only_regex and nproc > 1:
+                pool = mp.Pool(processes=nproc)
+                fxc_g_tmp = pool.starmap(wrap_kernel,product([0.0],omega_l,[n_0_bar],[fxc]))
+                pool.close()
+                fxc_g = np.zeros(omega_l.shape[0],dtype='complex')
+                for ifxcg in range(omega_l.shape[0]):
+                    fxc_g[ifxcg] = fxc_g_tmp[ifxcg]
             for iom,om in enumerate(omega_l):
-                fxc_g = wrap_kernel(gmod,om,n_avg2**(0.5),fxc)
-                fxc_diff = fxc_g - fxc_g0
+                if fxc in dyn_only_regex:
+                    if nproc == 1:
+                        fxc_g = wrap_kernel(0.0,om,n_0_bar,fxc)*np.ones(Ng)
+                        fxc_diff = fxc_g - fxc_g0
+                    else:
+                        fxc_diff = fxc_g[iom] - fxc_g0
+                else:
+                    if nproc == 1:
+                        fxc_g = wrap_kernel(gmod,om,n_0_bar,fxc)
+                    else:
+                        pool = mp.Pool(processes=nproc)
+                        fxc_g_tmp = pool.starmap(wrap_kernel,product(gmod,[om],[n_0_bar],[fxc]))
+                        pool.close()
+                        fxc_g = np.zeros(Ng,dtype='complex')
+                        for ifxcg in range(Ng):
+                            fxc_g[ifxcg] = fxc_g_tmp[ifxcg]
+                    fxc_diff = fxc_g - fxc_g0
+
                 alpha[iom] = intwg*np.sum(g_dot_q_hat*fxc_diff*ng02)/n_avg2
 
 
@@ -202,7 +258,7 @@ def plotter(fxcl,sph_avg=False):
         min_bd = min([min_bd,alp_im[anfxc].min()])
 
     if 'QV' in fxcl:
-        ax[0].set_ylim([1.1*alp_re['QV'].min(),1.05*max_bd])
+        ax[0].set_ylim([1.5*alp_re['QV'].min(),1.05*max_bd])
         ax[1].set_ylim([1.05*min_bd,0.0])
     else:
         ax[0].set_ylim([0.0,1.05*max_bd])
@@ -242,7 +298,7 @@ def plotter(fxcl,sph_avg=False):
             if bigrange:
                 offset = -0.35
         elif anfxc == 'MCP07_k0':
-            lbl = 'MCP07, $\\bar{k}=0$'
+            lbl = 'MCP07, $\\overline{k}=0$'
             if crystal == 'C':
                 offset = -0.08
         else:
@@ -267,10 +323,10 @@ if __name__=="__main__":
     #plot_fourier_components()
     #exit()
 
-    calc_alpha(['DLDA','MCP07_k0','MCP07'],sph_avg=False)
+    calc_alpha(['QV','DLDA','MCP07_k0','MCP07'],sph_avg=False)
     if crystal == 'Si':
         if bigrange:
-            plotter(['MCP07','MCP07_k0','DLDA'],sph_avg=False)
+            plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False)
         else:
             plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False)
     else:
