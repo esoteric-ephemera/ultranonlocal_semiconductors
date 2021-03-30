@@ -46,11 +46,11 @@ def init_ang_grid():
     return q_hat,ang_wg
 
 def wrap_kernel(q,omega,n,wfxc):
-    dv = {}
     dv['n'] = n
     dv['kF'] = (3*pi*n)**(1/3)
     dv['rs'] = (3/(4*pi*n))**(1/3)
     dv['rsh'] = dv['rs']**(0.5)
+    dv['wp0'] = (3/rs**3)**(0.5)
     if wfxc == 'MCP07':
         fxc = mcp07_dynamic(q,omega,dv,axis='real',revised=False,param='PZ81',no_k=False)
     elif wfxc == 'MCP07_k0':
