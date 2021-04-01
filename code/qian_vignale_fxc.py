@@ -53,6 +53,30 @@ def erf(x):
         tmp += a[i]*ttmp
     return sgnx*(1 - tmp*np.exp(-x**2))
 
+def bracket(fun,bds,nstep=500,vector=False,args=(),kwargs={}):
+
+    step = (bds[1]-bds[0])/nstep
+    ivals = []
+    if vector:
+        tmpl = np.arange(bds[0],bds[1],step)
+        funl = fun(tmpl,*args,**kwargs)
+        ofun = funl[0]
+        for istep in range(1,nstep):
+            if ofun*funl[istep] <= 0:
+                ivals.append([tmpl[istep-1],tmpl[istep]])
+            ofun = funl[istep]
+    else:
+        tmp = bds[0]
+        for istep in range(nstep):
+            cfun = fun(tmp,*args,**kwargs)
+            if istep == 0:
+                ofun = cfun
+            if ofun*cfun <= 0:
+                ivals.append([tmp-step,tmp])
+            ofun = cfun
+            tmp += step
+    return ivals
+
 def bisect(fun,bds,tol=1.e-6,maxstep=100,args=(),kwargs={}):
 
     """
@@ -101,7 +125,7 @@ def get_qv_pars(dv,use_mu_xc=True):
     """     Eq. 28   """
     a3l = 2*(2/(3*pi**2))**(1/3)*dv['rs']**2*s3l
     """     Eq. 29   """
-    b3l = 16*(2**10/(3*pi**8))**(1/15)*rs*(s3l/c3l)**(4/5)
+    b3l = 16*(2**10/(3*pi**8))**(1/15)*dv['rs']*(s3l/c3l)**(4/5)
 
     fxc_0 = alda(dv,x_only=False,param='PW92')
     _,fxc_inf=exact_constraints(dv,x_only=False,param='PW92')
@@ -125,10 +149,12 @@ def get_qv_pars(dv,use_mu_xc=True):
         res *= 4*(pi/dv['n'])**(0.5) # 2*omega_p(0)/n
         return df + res
 
-    if solve_g3l(.5)*solve_g3l(5) < 0.0:
-        g3l,success = bisect(solve_g3l,(0.5,5.0),tol=1.5e-7,maxstep=200)
-    else:
-        g3l = 0.5 # appears to be limiting value of Gamma_3?
+    poss_brack = bracket(solve_g3l,(1.e-6,3.0),nstep=500,vector=True)
+    g3l = 1.e-14
+    for tbrack in poss_brack:
+        tg3l,success = bisect(solve_g3l,tbrack,tol=1.5e-7,maxstep=200)
+        if success < 1.5e-7:
+            g3l = max(tg3l,g3l)
     o3l = 1 - 1.5*g3l
     return a3l,b3l,g3l,o3l
 
@@ -163,7 +189,7 @@ def fxc_longitudinal(dv,omega):
     else:
         re_fxc,terr = kram_kron(omega,dv['rs'])
         if terr['code'] == 0:
-            print(('WARNING, not converged for omega={:.4f}; last error {:.4e}').format(om,terr['error']))
+            print(('WARNING, not converged for omega={:.4f}; last error {:.4e}').format(omega,terr['error']))
     return re_fxc/pi + finf + 1.j*im_fxc
 
 

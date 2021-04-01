@@ -11,7 +11,7 @@ from gauss_quad import gauss_quad
 from mcp07 import chi_parser,mcp07_dynamic,gki_dynamic_real_freq
 from qian_vignale_fxc import fxc_longitudinal as qv_fxc
 
-bigrange = False
+bigrange = True
 use_multiprocesing = True
 
 def get_len(vec):
@@ -217,7 +217,7 @@ def calc_alpha(fxcl,sph_avg=False):
 
     return
 
-def plotter(fxcl,sph_avg=False):
+def plotter(fxcl,sph_avg=False,sign_conv=1):
 
     clist=['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:olive','tab:gray']
     line_styles=['-','--','-.']
@@ -252,17 +252,33 @@ def plotter(fxcl,sph_avg=False):
         alp_re[anfxc] = alp_re[anfxc][mask]
         alp_im[anfxc] = alp_im[anfxc][mask]
 
+        if sign_conv > 0:
+            # positive sign for sign convention that f_xc(q,omega) ~ (alpha + beta*omega**2)/q**2, a la Nazaraov & Vignale
+            max_bd = max([max_bd,alp_re[anfxc].max()])
+            min_bd = min([min_bd,alp_im[anfxc].min()])
+        elif sign_conv < 0:
+            # negative sign for sign convention that f_xc(q,omega) ~ -(alpha + beta*omega**2)/q**2, a la Botti & Reining
+            alp_re[anfxc]*= -1
+            alp_im[anfxc]*= -1
+            max_bd = max([max_bd,alp_im[anfxc].max()])
+            min_bd = min([min_bd,alp_re[anfxc].min()])
         ax[0].plot(om[anfxc],alp_re[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)])
         ax[1].plot(om[anfxc],alp_im[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)])
-        max_bd = max([max_bd,alp_re[anfxc].max()])
-        min_bd = min([min_bd,alp_im[anfxc].min()])
 
     if 'QV' in fxcl:
-        ax[0].set_ylim([1.5*alp_re['QV'].min(),1.05*max_bd])
-        ax[1].set_ylim([1.05*min_bd,0.0])
+        if sign_conv > 0:
+            ax[0].set_ylim([1.5*alp_re['QV'].min(),1.05*max_bd])
+            ax[1].set_ylim([1.05*min_bd,0.0])
+        elif sign_conv < 0:
+            ax[1].set_ylim([0.0,1.05*max_bd])
+            ax[0].set_ylim([1.05*min_bd,1.5*alp_re['QV'].max()])
     else:
-        ax[0].set_ylim([0.0,1.05*max_bd])
-        ax[1].set_ylim([1.05*min_bd,0.0])
+        if sign_conv > 0:
+            ax[0].set_ylim([0.0,1.05*max_bd])
+            ax[1].set_ylim([1.05*min_bd,0.0])
+        elif sign_conv < 0:
+            ax[1].set_ylim([0.0,1.05*max_bd])
+            ax[0].set_ylim([1.05*min_bd,0.0])
     ax[1].set_xlabel('$\\omega$ (eV)',fontsize=16)
     ax[0].set_ylabel('$\\mathrm{Re}~\\alpha(\\omega)$',fontsize=16)
     ax[1].set_ylabel('$\\mathrm{Im}~\\alpha(\\omega)$',fontsize=16)
@@ -295,7 +311,7 @@ def plotter(fxcl,sph_avg=False):
             offset = 0.03
         if anfxc == 'DLDA':
             lbl = 'Dynamic LDA'
-            if bigrange:
+            if bigrange and sign_conv > 0:
                 offset = -0.35
         elif anfxc == 'MCP07_k0':
             lbl = 'MCP07, $\\overline{k}=0$'
@@ -311,7 +327,11 @@ def plotter(fxcl,sph_avg=False):
         p2 = ax[0].transData.transform_point((om[anfxc][wind+1],alp_re[anfxc][wind+1]))
         p1 = ax[0].transData.transform_point((om[anfxc][wind-1],alp_re[anfxc][wind-1]))
         angle = 180/pi*np.arctan((p2[1]-p1[1])/(p2[0]-p1[0]))
-
+        if sign_conv<0:
+            fac = {'Si': {'DLDA':14, 'MCP07': 8, 'MCP07_k0': 11, 'QV': 6},
+            'C': {'DLDA':10, 'MCP07': 6, 'MCP07_k0': -1.5, 'QV': 4}}
+            if not bigrange:
+                offset *= -fac[crystal][anfxc]
         ax[0].annotate(lbl,(0.6*olim,alp_re[anfxc][wind]+offset),color=clist[ifxc],fontsize=12,rotation=angle)
     plt.subplots_adjust(top=.93)
     #plt.show()
@@ -323,8 +343,5 @@ if __name__=="__main__":
     #plot_fourier_components()
     #exit()
 
-    calc_alpha(['QV','DLDA','MCP07_k0','MCP07'],sph_avg=False)
-    if crystal == 'Si':
-        plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False)
-    else:
-        plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False)
+    #calc_alpha(['QV','DLDA','MCP07_k0','MCP07'],sph_avg=False)
+    plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False,sign_conv=-1)
