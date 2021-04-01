@@ -11,7 +11,7 @@ from gauss_quad import gauss_quad
 from mcp07 import chi_parser,mcp07_dynamic,gki_dynamic_real_freq
 from qian_vignale_fxc import fxc_longitudinal as qv_fxc
 
-bigrange = True
+bigrange = False
 use_multiprocesing = True
 
 def get_len(vec):
@@ -328,11 +328,11 @@ def plotter(fxcl,sph_avg=False,sign_conv=1):
         p1 = ax[0].transData.transform_point((om[anfxc][wind-1],alp_re[anfxc][wind-1]))
         angle = 180/pi*np.arctan((p2[1]-p1[1])/(p2[0]-p1[0]))
         if sign_conv<0:
-            fac = {'Si': {'DLDA':14, 'MCP07': 8, 'MCP07_k0': 11, 'QV': 6},
-            'C': {'DLDA':10, 'MCP07': 6, 'MCP07_k0': -1.5, 'QV': 4}}
+            fac = {'Si': {'DLDA':15, 'MCP07': 8, 'MCP07_k0': 12, 'QV': 6},
+            'C': {'DLDA':11.5, 'MCP07': 7, 'MCP07_k0': -2, 'QV': 5}}
             if not bigrange:
                 offset *= -fac[crystal][anfxc]
-        ax[0].annotate(lbl,(0.6*olim,alp_re[anfxc][wind]+offset),color=clist[ifxc],fontsize=12,rotation=angle)
+        ax[0].annotate(lbl,(0.6*olim,alp_re[anfxc][wind]+offset),color=clist[ifxc],fontsize=14,rotation=angle)
     plt.subplots_adjust(top=.93)
     #plt.show()
     #exit()
