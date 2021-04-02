@@ -120,7 +120,6 @@ def s_3_l(kf):
 def get_qv_pars(dv,use_mu_xc=True):
 
     c3l = 23/15 # just below Eq. 13
-
     s3l = s_3_l(dv['kF'])
     """     Eq. 28   """
     a3l = 2*(2/(3*pi**2))**(1/3)*dv['rs']**2*s3l
@@ -160,7 +159,7 @@ def get_qv_pars(dv,use_mu_xc=True):
 
 def im_fxc_longitudinal(omega,dv):
 
-    a3,b3,g3,om3 = get_qv_pars(dv['rs'])
+    a3,b3,g3,om3 = get_qv_pars(dv)
 
     wt = omega/(2*dv['wp0'])
 
@@ -187,13 +186,16 @@ def fxc_longitudinal(dv,omega):
             if terr['code'] == 0:
                 print(('WARNING, not converged for omega={:.4f}; last error {:.4e}').format(om,terr['error']))
     else:
-        re_fxc,terr = kram_kron(omega,dv['rs'])
+        re_fxc,terr = kram_kron(omega,dv)
         if terr['code'] == 0:
             print(('WARNING, not converged for omega={:.4f}; last error {:.4e}').format(omega,terr['error']))
     return re_fxc/pi + finf + 1.j*im_fxc
 
 
 if __name__=="__main__":
+
+    fit_mu_xc()
+    exit()
 
     for rs in [2.00876975652943]:#[0.1,0.5,1,2,3,4,5,10,20,30,40,69,100]:
         dv = density_variables(rs)

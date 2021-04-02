@@ -353,8 +353,7 @@ def gki_dynamic_real_freq(dv,u,x_only=False,revised=False,param='PZ81',dimension
         h0 = 1.0/gam
         hx = h0*(1.0 - aj*xk**2)
         fac = (h0*aj)**(4.0/7.0)
-        h_mag = ((1.0 + fac*xk.real**2-fac*xk.imag**2)**2 + (2*fac*xk.real*xk.imag)**2)**(0.5)
-        hx /= (1.0 + (h0*aj)**(4.0/7.0)*xk**2)**(7.0/4.0)
+        hx /= (1.0 + fac*xk**2)**(7.0/4.0)
 
     isscalar=False
     if not hasattr(u,'__len__'):

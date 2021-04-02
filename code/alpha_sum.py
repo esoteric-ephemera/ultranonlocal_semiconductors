@@ -1,56 +1,41 @@
 import numpy as np
-from os import path
+from os import path,mkdir
 from itertools import product
 import multiprocessing as mp
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from constants import crystal,pi,Eh_to_eV
-from discrete_ft_n import oflnm as ft_dens_file
-from gauss_quad import gauss_quad
+#from gauss_quad import gauss_quad
 from mcp07 import chi_parser,mcp07_dynamic,gki_dynamic_real_freq
 from qian_vignale_fxc import fxc_longitudinal as qv_fxc
+from pseudo_pt import get_n_g
 
-bigrange = False
+metal_regex = ['Al','Na']
+semicond_regex = ['Si','C']
+if crystal in semicond_regex:
+    from discrete_ft_n import dft_n
+    from discrete_ft_n import oflnm as ft_dens_file
+
+bigrange = True
 use_multiprocesing = True
+if not path.isdir('./figs'):
+    mkdir('./figs')
+wdir = './data_files/{:}/'.format(crystal)
+
+ulim_d = {'Si':25.0, 'C':25.0, 'Al': 250.0, 'Na': 100.0}
 
 def get_len(vec):
     return np.sum(vec**2)**(0.5)
 
-def init_ang_grid():
-
-    n_quad_pts = 20
-    wfile = './grids/gauss_legendre_{:}_pts.csv'.format(n_quad_pts)
-    if path.isfile(wfile):
-        wg,grid = np.transpose(np.genfromtxt(wfile,delimiter=',',skip_header=1))
-    else:
-        wg,grid = gauss_quad(n_quad_pts,grid_type='legendre')
-
-    """  phi is the azimuthal angle, grid is cos(theta), with theta the polar angle """
-    phi_grid = pi*(grid + 1)
-    phi_wg = pi*wg
-
-    """ setting up two-dimensional angular grid for spherical averaging  """
-    ang_wg = np.zeros(wg.shape[0]**2)
-    q_hat = np.zeros((grid.shape[0]**2,3))
-    ind = 0
-    for iphi,phi in enumerate(phi_grid):
-        for icth,cth in enumerate(grid):
-            q_hat[ind,0] = (1-cth**2)**(0.5)*np.cos(phi)
-            q_hat[ind,1] = (1-cth**2)**(0.5)*np.sin(phi)
-            q_hat[ind,2] = cth
-            ang_wg[ind] = phi_wg[iphi]*wg[icth]
-            ind += 1
-    """ normalization for spherical average is 1/(4 pi)  """
-    ang_wg/=(4*pi)
-    return q_hat,ang_wg
-
 def wrap_kernel(q,omega,n,wfxc):
+    dv = {}
     dv['n'] = n
-    dv['kF'] = (3*pi*n)**(1/3)
+    dv['kF'] = (3*pi**2*n)**(1/3)
     dv['rs'] = (3/(4*pi*n))**(1/3)
     dv['rsh'] = dv['rs']**(0.5)
-    dv['wp0'] = (3/rs**3)**(0.5)
+    dv['wp0'] = (3/dv['rs']**3)**(0.5)
     if wfxc == 'MCP07':
         fxc = mcp07_dynamic(q,omega,dv,axis='real',revised=False,param='PZ81',no_k=False)
     elif wfxc == 'MCP07_k0':
@@ -65,13 +50,19 @@ def wrap_kernel(q,omega,n,wfxc):
 
 def plot_fourier_components():
 
-    dftn = np.genfromtxt(ft_dens_file,delimiter=',',skip_header=1)
-    g = dftn[:,:3]
+    if crystal in metal_regex:
 
-    ng0 = np.zeros(dftn.shape[0],dtype='complex')
-    ng0.real = dftn[:,3]
-    ng0.imag = dftn[:,4]
-    gmod = (g[:,0]**2 + g[:,1]**2 + g[:,2]**2)**(0.5)
+        gmod,ng0,rs0 = get_n_g(crystal,full_output=False)
+    else:
+        if not path.isfile(ft_dens_file):
+            dft_n()
+        dftn = np.genfromtxt(ft_dens_file,delimiter=',',skip_header=1)
+        g = dftn[:,:3]
+
+        ng0 = np.zeros(dftn.shape[0],dtype='complex')
+        ng0.real = dftn[:,3]
+        ng0.imag = dftn[:,4]
+        gmod = (g[:,0]**2 + g[:,1]**2 + g[:,2]**2)**(0.5)
     srt_ind = np.argsort(gmod)
     en = gmod[srt_ind]**2/2*Eh_to_eV
     plt.plot(en,np.abs(ng0[srt_ind].real),label='$|\\mathrm{Re} ~n(\\vec G)|$')
@@ -84,49 +75,57 @@ def plot_fourier_components():
     plt.show()
     return
 
-def calc_alpha(fxcl,sph_avg=False):
+def init_n_g(solid):
+
+    if solid in metal_regex:
+
+        gmod,ng0,rs0 = get_n_g(solid,full_output=False)
+        n_0_bar = 3/(4*pi*rs0**3)
+
+    elif solid in semicond_regex:
+        if not path.isfile(ft_dens_file):
+            dft_n()
+        dftn = np.genfromtxt(ft_dens_file,delimiter=',',skip_header=1)
+        g = dftn[:,:3]
+
+        ng0 = np.zeros(dftn.shape[0],dtype='complex')
+        ng0.real = dftn[:,3]
+        ng0.imag = dftn[:,4]
+
+        #   first find the index of the zero wavevector
+        if get_len(g[0])==0.0:
+            # using FFT, first entry is (0,0,0)
+            n_0_bar = np.abs(ng0[0])
+            # remove the zero-wavevector component from the sum
+            ng0 = ng0[1:]
+            g = g[1:]
+        else:
+            for iag,ag in enumerate(g):
+                if get_len(ag)==0.0:
+                    n_0_bar = np.abs(ng0[iag])
+                    ng0 = np.delete(ng0,iag,axis=0)
+                    g = np.delete(g,iag,axis=0)
+                    break
+        gmod = (g[:,0]**2 + g[:,1]**2 + g[:,2]**2)**(0.5)
+
+    return gmod,np.abs(ng0)**2,n_0_bar
+
+
+def calc_alpha(fxcl,):
 
     dyn_only_regex = ['DLDA','QV']
 
-    dftn = np.genfromtxt(ft_dens_file,delimiter=',',skip_header=1)
-    g = dftn[:,:3]
-
-    ng0 = np.zeros(dftn.shape[0],dtype='complex')
-    ng0.real = dftn[:,3]
-    ng0.imag = dftn[:,4]
-
-    #   first find the index of the zero wavevector
-    if get_len(g[0])==0.0:
-        # using FFT, first entry is (0,0,0)
-        n_0_bar = np.abs(ng0[0])
-        n_avg2 = np.abs(ng0[0])**2
-        # remove the zero-wavevector component from the sum
-        ng0 = ng0[1:]
-        g = g[1:]
-    else:
-        for iag,ag in enumerate(g):
-            if get_len(ag)==0.0:
-                n_0_bar = np.abs(ng0[iag])
-                n_avg2 = np.abs(ng0[iag])**2
-                ng0 = np.delete(ng0,iag,axis=0)
-                g = np.delete(g,iag,axis=0)
-                break
+    gmod,ng02,n_0_bar = init_n_g(crystal)
     print(('average density {:} bohr**(-3); rs_avg = {:} bohr').format(n_0_bar,(3.0/(4*pi*n_0_bar))**(1/3)))
-    ng02 = np.abs(ng0)**2
-    gmod = (g[:,0]**2 + g[:,1]**2 + g[:,2]**2)**(0.5)
+    n_avg2 = n_0_bar**2
+    g_dot_q_hat = gmod**2
 
-    if not sph_avg:
-        g_dot_q_hat = gmod**2
-
-    Ng = g.shape[0]
+    Ng = gmod.shape[0]
     if bigrange:
-        omega_l = np.linspace(0.0,400.0,500)/Eh_to_eV
+        ulim = 400.0
     else:
-        if crystal == 'Si':
-            ulim = 25.0
-        elif crystal == 'C':
-            ulim = 25.0
-        omega_l = np.linspace(0.0,ulim,500)/Eh_to_eV
+        ulim = ulim_d[crystal]
+    omega_l = np.linspace(0.0,ulim,500)/Eh_to_eV
 
     if bigrange:
         addn = '_bigrange'
@@ -143,6 +142,9 @@ def calc_alpha(fxcl,sph_avg=False):
         # only need to evaluate zero-frequency term once
         if fxc in dyn_only_regex:
             fxc_g0 = wrap_kernel(0.0,0.0,n_0_bar,fxc)
+            if nproc == 1:
+                # also only need to evaluate f_xc[n](q=0,omega) once
+                fxc_g = wrap_kernel(0.0,omega_l,n_0_bar,fxc)
         else:
             if nproc == 1:
                 fxc_g0 = wrap_kernel(gmod,0.0,n_0_bar,fxc)
@@ -156,68 +158,36 @@ def calc_alpha(fxcl,sph_avg=False):
 
         alpha = np.zeros(omega_l.shape[0],dtype='complex')
 
-        if sph_avg:
-            ofl = './alpha_omega_sph_avg_'+fxc+addn+'.csv'
-            # also only need to evaluate g_vec . q_hat once
-            q_hat,intwg = init_ang_grid()
-            Nq = q_hat.shape[0]
-            g_dot_q_hat = np.zeros((Ng,Nq))
-            for iag,ag in enumerate(g):
-                g_dot_q_hat[iag] = (np.matmul(q_hat,ag))**2
-
-            for iom,om in enumerate(omega_l):
-                if fxc in dyn_only_regex:
-                    fxc_g = wrap_kernel(0.0,om,n_0_bar,fxc)*np.ones(Ng)
+        ofl = wdir+'alpha_omega_'+fxc+addn+'.csv'
+        intwg = 1.0/3.0
+        if fxc in dyn_only_regex and nproc > 1:
+            pool = mp.Pool(processes=nproc)
+            fxc_g_tmp = pool.starmap(wrap_kernel,product([0.0],omega_l,[n_0_bar],[fxc]))
+            pool.close()
+            fxc_g = np.zeros(omega_l.shape[0],dtype='complex')
+            for ifxcg in range(omega_l.shape[0]):
+                fxc_g[ifxcg] = fxc_g_tmp[ifxcg]
+        for iom,om in enumerate(omega_l):
+            if fxc in dyn_only_regex:
+                fxc_diff = fxc_g[iom] - fxc_g0
+            else:
+                if nproc == 1:
+                    fxc_g = wrap_kernel(gmod,om,n_0_bar,fxc)
                 else:
-                    if nproc == 1:
-                        fxc_g = wrap_kernel(gmod,om,n_0_bar,fxc)
-                    else:
-                        pool = mp.Pool(processes=nproc)
-                        fxc_g_tmp = pool.starmap(wrap_kernel,product(gmod,[om],[n_0_bar],[fxc]))
-                        pool.close()
-                        fxc_g = np.zeros(Ng,dtype='complex')
-                        for ifxcg in range(Ng):
-                            fxc_g[ifxcg] = fxc_g_tmp[ifxcg]
+                    pool = mp.Pool(processes=nproc)
+                    fxc_g_tmp = pool.starmap(wrap_kernel,product(gmod,[om],[n_0_bar],[fxc]))
+                    pool.close()
+                    fxc_g = np.zeros(Ng,dtype='complex')
+                    for ifxcg in range(Ng):
+                        fxc_g[ifxcg] = fxc_g_tmp[ifxcg]
                 fxc_diff = fxc_g - fxc_g0
-                for iag in range(Ng):
-                    alpha[iom] += np.sum(intwg*g_dot_q_hat[iag]*fxc_diff[iag]*ng02[iag])/n_avg2
-        else:
-            ofl = './alpha_omega_'+fxc+addn+'.csv'
-            intwg = 1.0/3.0
-            if fxc in dyn_only_regex and nproc > 1:
-                pool = mp.Pool(processes=nproc)
-                fxc_g_tmp = pool.starmap(wrap_kernel,product([0.0],omega_l,[n_0_bar],[fxc]))
-                pool.close()
-                fxc_g = np.zeros(omega_l.shape[0],dtype='complex')
-                for ifxcg in range(omega_l.shape[0]):
-                    fxc_g[ifxcg] = fxc_g_tmp[ifxcg]
-            for iom,om in enumerate(omega_l):
-                if fxc in dyn_only_regex:
-                    if nproc == 1:
-                        fxc_g = wrap_kernel(0.0,om,n_0_bar,fxc)*np.ones(Ng)
-                        fxc_diff = fxc_g - fxc_g0
-                    else:
-                        fxc_diff = fxc_g[iom] - fxc_g0
-                else:
-                    if nproc == 1:
-                        fxc_g = wrap_kernel(gmod,om,n_0_bar,fxc)
-                    else:
-                        pool = mp.Pool(processes=nproc)
-                        fxc_g_tmp = pool.starmap(wrap_kernel,product(gmod,[om],[n_0_bar],[fxc]))
-                        pool.close()
-                        fxc_g = np.zeros(Ng,dtype='complex')
-                        for ifxcg in range(Ng):
-                            fxc_g[ifxcg] = fxc_g_tmp[ifxcg]
-                    fxc_diff = fxc_g - fxc_g0
+            alpha[iom] = intwg*np.sum(g_dot_q_hat*fxc_diff*ng02)/n_avg2
 
-                alpha[iom] = intwg*np.sum(g_dot_q_hat*fxc_diff*ng02)/n_avg2
-
-
-        np.savetxt(ofl,np.transpose((omega_l,alpha.real,alpha.imag)),delimiter=',',header='omega (a.u.), Re alpha(w), Im alpha(w)',fmt='%.18f')
+        np.savetxt(ofl,np.transpose((omega_l,alpha.real,alpha.imag)),delimiter=',',header='omega (a.u.), Re alpha(w), Im alpha(w)')
 
     return
 
-def plotter(fxcl,sph_avg=False,sign_conv=1):
+def plotter(fxcl,sign_conv=1):
 
     clist=['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:olive','tab:gray']
     line_styles=['-','--','-.']
@@ -225,10 +195,7 @@ def plotter(fxcl,sph_avg=False,sign_conv=1):
     if bigrange:
         olim = 400
     else:
-        if crystal == 'Si':
-            olim = 25
-        elif crystal == 'C':
-            olim = 25
+        olim = ulim_d[crystal]
     fig,ax = plt.subplots(2,1,figsize=(8,6))
     max_bd = 0.0
     min_bd = 0.0
@@ -239,11 +206,10 @@ def plotter(fxcl,sph_avg=False,sign_conv=1):
         addn = '_bigrange'
     else:
         addn = ''
+    if crystal == 'Si' and not bigrange:
+        axins = inset_axes(ax[0],width='50%',height='45%',loc=3,borderpad=0)#InsetPosition(ax[0],[.05,.05,.45,.5]), loc=3)
     for ifxc,anfxc in enumerate(fxcl):
-        if sph_avg:
-            flnm = './alpha_omega_sph_avg_'+anfxc+addn+'.csv'
-        else:
-            flnm = './alpha_omega_'+anfxc+addn+'.csv'
+        flnm = wdir+'alpha_omega_'+anfxc+addn+'.csv'
 
         om[anfxc],alp_re[anfxc],alp_im[anfxc] = np.transpose(np.genfromtxt(flnm,delimiter=',',skip_header=1))
         om[anfxc]*=Eh_to_eV
@@ -264,7 +230,13 @@ def plotter(fxcl,sph_avg=False,sign_conv=1):
             min_bd = min([min_bd,alp_re[anfxc].min()])
         ax[0].plot(om[anfxc],alp_re[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)])
         ax[1].plot(om[anfxc],alp_im[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)])
-
+        if crystal == 'Si' and not bigrange:
+            axins.plot(om[anfxc][om[anfxc]<=10.0],alp_re[anfxc][om[anfxc]<=10.0],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)])
+    if crystal == 'Si' and not bigrange:
+        axins.set_xlim([0.0,10.0])
+        axins.set_xticks([2.0,4.0,6.0,8.0])
+        axins.tick_params(axis='x',direction='in',top=True,bottom=False,labelbottom=False, labeltop=True,pad=1)
+        axins.tick_params(axis='y',direction='in',right=True,left=False,labelleft=False, labelright=True,pad=1)
     if 'QV' in fxcl:
         if sign_conv > 0:
             ax[0].set_ylim([1.5*alp_re['QV'].min(),1.05*max_bd])
@@ -282,33 +254,31 @@ def plotter(fxcl,sph_avg=False,sign_conv=1):
     ax[1].set_xlabel('$\\omega$ (eV)',fontsize=16)
     ax[0].set_ylabel('$\\mathrm{Re}~\\alpha(\\omega)$',fontsize=16)
     ax[1].set_ylabel('$\\mathrm{Im}~\\alpha(\\omega)$',fontsize=16)
+    axpars = {'y': {'Si': (.1,.2,.1,.2),'C':(.025,.05,.025,.05), 'Al': (.05,.1,.05,.1), 'Na': (.025,.05,.025,.05)},
+    'x': {'Si': (1,2), 'C': (1,2), 'Al': (25,50), 'Na': (10,20)}}
     if crystal == 'Si':
-        ax[0].yaxis.set_major_locator(MultipleLocator(.5))
-        ax[0].yaxis.set_minor_locator(MultipleLocator(.25))
-        ax[1].yaxis.set_major_locator(MultipleLocator(.2))
-        ax[1].yaxis.set_minor_locator(MultipleLocator(.1))
-    elif crystal == 'C':
-        ax[0].yaxis.set_major_locator(MultipleLocator(.2))
-        ax[0].yaxis.set_minor_locator(MultipleLocator(.1))
-        ax[1].yaxis.set_major_locator(MultipleLocator(.2))
-        ax[1].yaxis.set_minor_locator(MultipleLocator(.1))
+        if bigrange:
+            axpars['y']['Si'] = (.125,.25,.1,.2)
+            axpars['x']['Si'] = (25,50)
+    ax[0].yaxis.set_minor_locator(MultipleLocator(axpars['y'][crystal][0]))
+    ax[0].yaxis.set_major_locator(MultipleLocator(axpars['y'][crystal][1]))
+    ax[1].yaxis.set_minor_locator(MultipleLocator(axpars['y'][crystal][2]))
+    ax[1].yaxis.set_major_locator(MultipleLocator(axpars['y'][crystal][3]))
     for i in range(2):
         ax[i].set_xlim([0.0,olim])#om.max()])
         ax[i].tick_params(axis='both',labelsize=14)
-        if bigrange:
-            ax[i].xaxis.set_major_locator(MultipleLocator(50))
-            ax[i].xaxis.set_minor_locator(MultipleLocator(25))
-        else:
-            ax[i].xaxis.set_major_locator(MultipleLocator(2))
-            ax[i].xaxis.set_minor_locator(MultipleLocator(1))
+        ax[i].xaxis.set_minor_locator(MultipleLocator(axpars['x'][crystal][0]))
+        ax[i].xaxis.set_major_locator(MultipleLocator(axpars['x'][crystal][1]))
+
     ax[0].xaxis.set_ticklabels([' ' for i in ax[0].xaxis.get_major_ticks()])
     ax[0].tick_params(axis='y',labelsize=14)
-    plt.suptitle('{:}, r$^2$SCAN density'.format(crystal),fontsize=16)
+    if crystal in semicond_regex:
+        plt.suptitle('{:}, r$^2$SCAN density'.format(crystal),fontsize=16)
+    elif crystal in metal_regex:
+        plt.suptitle('{:}, pseudopotential density'.format(crystal),fontsize=16)
     for ifxc,anfxc in enumerate(fxcl):
-        if crystal == 'Si':
-            offset = 0.06
-        elif crystal == 'C':
-            offset = 0.03
+        offset_d = {'Si':.01,'C':.01,'Al':.01,'Na':.005}
+        offset=offset_d[crystal]
         if anfxc == 'DLDA':
             lbl = 'Dynamic LDA'
             if bigrange and sign_conv > 0:
@@ -328,20 +298,22 @@ def plotter(fxcl,sph_avg=False,sign_conv=1):
         p1 = ax[0].transData.transform_point((om[anfxc][wind-1],alp_re[anfxc][wind-1]))
         angle = 180/pi*np.arctan((p2[1]-p1[1])/(p2[0]-p1[0]))
         if sign_conv<0:
-            fac = {'Si': {'DLDA':15, 'MCP07': 8, 'MCP07_k0': 12, 'QV': 6},
-            'C': {'DLDA':11.5, 'MCP07': 7, 'MCP07_k0': -2, 'QV': 5}}
-            if not bigrange:
+            fac = {'Si': {'DLDA':10, 'MCP07': -.2, 'MCP07_k0': -2.5, 'QV': 2},#{'DLDA':22, 'MCP07': 3.5, 'MCP07_k0': 14, 'QV': 2.5},
+            'C': {'DLDA': 3, 'MCP07': -.1, 'MCP07_k0': .02, 'QV': 1}}
+            if bigrange:
+                fac = {'Si': {'DLDA':12, 'MCP07': -.2, 'MCP07_k0': -2.2, 'QV': 3}}
+            if crystal in fac:
                 offset *= -fac[crystal][anfxc]
-        ax[0].annotate(lbl,(0.6*olim,alp_re[anfxc][wind]+offset),color=clist[ifxc],fontsize=14,rotation=angle)
+        ax[0].annotate(lbl,(om[anfxc][wind],alp_re[anfxc][wind]+offset),color=clist[ifxc],fontsize=14,rotation=angle,rotation_mode='anchor')
     plt.subplots_adjust(top=.93)
     #plt.show()
     #exit()
-    plt.savefig('./{:}_alpha_omega'.format(crystal)+addn+'.pdf',dpi=600,bbox_inches='tight')
+    plt.savefig('./figs/{:}_alpha_omega'.format(crystal)+addn+'.pdf',dpi=600,bbox_inches='tight')
     return
 
 if __name__=="__main__":
     #plot_fourier_components()
     #exit()
 
-    #calc_alpha(['QV','DLDA','MCP07_k0','MCP07'],sph_avg=False)
-    plotter(['MCP07','MCP07_k0','DLDA','QV'],sph_avg=False,sign_conv=-1)
+    #calc_alpha(['DLDA','MCP07_k0','MCP07','QV'])
+    plotter(['MCP07','MCP07_k0','DLDA','QV'],sign_conv=-1)
