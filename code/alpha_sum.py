@@ -18,10 +18,11 @@ if crystal in semicond_regex:
     from discrete_ft_n import dft_n
     from discrete_ft_n import oflnm as ft_dens_file
 
-bigrange = True
+bigrange = False
 use_multiprocesing = True
-if not path.isdir('./figs'):
-    mkdir('./figs')
+for adir in ['./figs', './eps_figs']:
+    if not path.isdir(adir):
+        mkdir(adir)
 wdir = './data_files/{:}/'.format(crystal)
 
 ulim_d = {'Si':25.0, 'C':25.0, 'Al': 250.0, 'Na': 100.0}
@@ -228,15 +229,16 @@ def plotter(fxcl,sign_conv=1):
             alp_im[anfxc]*= -1
             max_bd = max([max_bd,alp_im[anfxc].max()])
             min_bd = min([min_bd,alp_re[anfxc].min()])
-        ax[0].plot(om[anfxc],alp_re[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)])
-        ax[1].plot(om[anfxc],alp_im[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)])
+        ax[0].plot(om[anfxc],alp_re[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)],linewidth=2)
+        ax[1].plot(om[anfxc],alp_im[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)],linewidth=2)
         if crystal == 'Si' and not bigrange:
-            axins.plot(om[anfxc][om[anfxc]<=10.0],alp_re[anfxc][om[anfxc]<=10.0],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)])
+            axins.plot(om[anfxc][om[anfxc]<=10.0],alp_re[anfxc][om[anfxc]<=10.0],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)],linewidth=1.5)
     if crystal == 'Si' and not bigrange:
         axins.set_xlim([0.0,10.0])
         axins.set_xticks([2.0,4.0,6.0,8.0])
         axins.tick_params(axis='x',direction='in',top=True,bottom=False,labelbottom=False, labeltop=True,pad=1)
         axins.tick_params(axis='y',direction='in',right=True,left=False,labelleft=False, labelright=True,pad=1)
+        axins.tick_params(axis='both',labelsize=16)
     if 'QV' in fxcl:
         if sign_conv > 0:
             ax[0].set_ylim([1.5*alp_re['QV'].min(),1.05*max_bd])
@@ -251,9 +253,9 @@ def plotter(fxcl,sign_conv=1):
         elif sign_conv < 0:
             ax[1].set_ylim([0.0,1.05*max_bd])
             ax[0].set_ylim([1.05*min_bd,0.0])
-    ax[1].set_xlabel('$\\omega$ (eV)',fontsize=16)
-    ax[0].set_ylabel('$\\mathrm{Re}~\\alpha(\\omega)$',fontsize=16)
-    ax[1].set_ylabel('$\\mathrm{Im}~\\alpha(\\omega)$',fontsize=16)
+    ax[1].set_xlabel('$\\omega$ (eV)',fontsize=20)
+    ax[0].set_ylabel('$\\mathrm{Re}~\\alpha(\\omega)$',fontsize=20)
+    ax[1].set_ylabel('$\\mathrm{Im}~\\alpha(\\omega)$',fontsize=20)
     axpars = {'y': {'Si': (.1,.2,.1,.2),'C':(.025,.05,.025,.05), 'Al': (.05,.1,.05,.1), 'Na': (.025,.05,.025,.05)},
     'x': {'Si': (1,2), 'C': (1,2), 'Al': (25,50), 'Na': (10,20)}}
     if crystal == 'Si':
@@ -266,12 +268,12 @@ def plotter(fxcl,sign_conv=1):
     ax[1].yaxis.set_major_locator(MultipleLocator(axpars['y'][crystal][3]))
     for i in range(2):
         ax[i].set_xlim([0.0,olim])#om.max()])
-        ax[i].tick_params(axis='both',labelsize=14)
+        ax[i].tick_params(axis='both',labelsize=20)
         ax[i].xaxis.set_minor_locator(MultipleLocator(axpars['x'][crystal][0]))
         ax[i].xaxis.set_major_locator(MultipleLocator(axpars['x'][crystal][1]))
 
     ax[0].xaxis.set_ticklabels([' ' for i in ax[0].xaxis.get_major_ticks()])
-    ax[0].tick_params(axis='y',labelsize=14)
+    ax[0].tick_params(axis='y',labelsize=20)
     if crystal in semicond_regex:
         plt.suptitle('{:}, r$^2$SCAN density'.format(crystal),fontsize=16)
     elif crystal in metal_regex:
@@ -301,7 +303,7 @@ def plotter(fxcl,sign_conv=1):
             fac = {'Si': {'DLDA':10, 'MCP07': -.2, 'MCP07_k0': -2.5, 'QV': 2},#{'DLDA':22, 'MCP07': 3.5, 'MCP07_k0': 14, 'QV': 2.5},
             'C': {'DLDA': 3, 'MCP07': -.1, 'MCP07_k0': .02, 'QV': 1}}
             if bigrange:
-                fac = {'Si': {'DLDA':12, 'MCP07': -.2, 'MCP07_k0': -2.2, 'QV': 3}}
+                fac = {'Si': {'DLDA':12, 'MCP07': -.5, 'MCP07_k0': -2.2, 'QV': 3}}
             if crystal in fac:
                 offset *= -fac[crystal][anfxc]
         ax[0].annotate(lbl,(om[anfxc][wind],alp_re[anfxc][wind]+offset),color=clist[ifxc],fontsize=14,rotation=angle,rotation_mode='anchor')
@@ -309,6 +311,8 @@ def plotter(fxcl,sign_conv=1):
     #plt.show()
     #exit()
     plt.savefig('./figs/{:}_alpha_omega'.format(crystal)+addn+'.pdf',dpi=600,bbox_inches='tight')
+    # easier to look at PDF's, but journals require eps figures
+    plt.savefig('./eps_figs/{:}_alpha_omega'.format(crystal)+addn+'.eps',dpi=600,bbox_inches='tight')
     return
 
 if __name__=="__main__":

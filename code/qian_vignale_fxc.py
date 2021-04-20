@@ -119,6 +119,17 @@ def s_3_l(kf):
 
 def get_qv_pars(dv,use_mu_xc=True):
 
+    if hasattr(dv['rs'],'__len__'):
+        nrs = len(dv['rs'])
+        pars = np.zeros((nrs,4))
+        for irs in range(nrs):
+            pars[irs] = get_qv_pars_single(density_variables(dv['rs'][irs]),use_mu_xc=use_mu_xc)
+        return pars[:,0],pars[:,1],pars[:,2],pars[:,3]
+    else:
+        return get_qv_pars_single(dv,use_mu_xc=use_mu_xc)
+
+def get_qv_pars_single(dv,use_mu_xc=True):
+
     c3l = 23/15 # just below Eq. 13
     s3l = s_3_l(dv['kF'])
     """     Eq. 28   """
@@ -148,7 +159,7 @@ def get_qv_pars(dv,use_mu_xc=True):
         res *= 4*(pi/dv['n'])**(0.5) # 2*omega_p(0)/n
         return df + res
 
-    poss_brack = bracket(solve_g3l,(1.e-6,3.0),nstep=500,vector=True)
+    poss_brack = bracket(solve_g3l,(1.e-6,5.0),nstep=500,vector=True)
     g3l = 1.e-14
     for tbrack in poss_brack:
         tg3l,success = bisect(solve_g3l,tbrack,tol=1.5e-7,maxstep=200)
@@ -157,9 +168,12 @@ def get_qv_pars(dv,use_mu_xc=True):
     o3l = 1 - 1.5*g3l
     return a3l,b3l,g3l,o3l
 
-def im_fxc_longitudinal(omega,dv):
+def im_fxc_longitudinal(omega,dv,pars=()):
 
-    a3,b3,g3,om3 = get_qv_pars(dv)
+    if len(pars)==0:
+        a3,b3,g3,om3 = get_qv_pars(dv)
+    else:
+        a3,b3,g3,om3 = pars
 
     wt = omega/(2*dv['wp0'])
 
@@ -191,6 +205,55 @@ def fxc_longitudinal(dv,omega):
             print(('WARNING, not converged for omega={:.4f}; last error {:.4e}').format(omega,terr['error']))
     return re_fxc/pi + finf + 1.j*im_fxc
 
+def fxc_longitudinal_fixed_grid(omega,dv,inf_grid,inf_wg):
+
+    qvpars = get_qv_pars(dv)
+    wcut = max(dv['wp0'],np.abs(qvpars[2]).max())
+    im_qv = im_fxc_longitudinal(omega,dv,pars=qvpars)
+    _,finf=exact_constraints(dv,x_only=False,param='PW92')
+
+    re_qv = np.zeros(im_qv.shape[0])
+    twg = np.concatenate((inf_wg,inf_wg))
+
+    #lmask = omega < 20*wcut
+
+    w,igrid = np.meshgrid(omega,inf_grid)
+    lgrid = -igrid + w - 1.e-10
+    im_qv_l = im_fxc_longitudinal(lgrid,dv,pars=qvpars)
+    ugrid = w + 1.e-10 + igrid
+    im_qv_u = im_fxc_longitudinal(ugrid,dv,pars=qvpars)
+    intgd = im_qv_l/(lgrid - w) + im_qv_u/(ugrid - w)
+    re_qv = np.einsum('i,ik->k',inf_wg,intgd)
+    #lval = [omega[lmask].max(),re_qv[lmask][-1]]
+    #umask = omega >= 20*wcut
+    #re_qv[umask] = np.sign(lval[0])*lval[1]*np.abs(lval[0]/omega[umask])**(3/2)
+    fxc_qv = re_qv + finf + 1.j*im_qv
+    return fxc_qv
+
+    for iw,w in enumerate(omega[omega < 20*wcut]):
+        """
+        lgrid = -inf_grid + w - 1.e-10
+        im_qv_l = im_fxc_longitudinal(lgrid,dv,pars=qvpars)
+        ugrid = w + 1.e-10 + inf_grid
+        im_qv_u = im_fxc_longitudinal(ugrid,dv,pars=qvpars)
+        intgd = im_qv_l/(lgrid - w) + im_qv_u/(ugrid - w)
+        """
+        tgrid = np.concatenate((-inf_grid + w - 1.e-10,w + 1.e-10 + inf_grid))
+        im_qv_tmp = im_fxc_longitudinal(tgrid,dv,pars=qvpars)
+        intgd = im_qv_tmp/(tgrid - w)
+        re_qv[iw] = np.sum(twg*intgd)/pi
+        lval = [w,re_qv[iw]]
+
+    """
+        we're kinda cheating here. Integral gets harder and harder to converge
+        as omega grows large. So we truncate the integral above 20*w_cut, where
+        w_cut = max(omega_p(0),Gamma_3). Gamma_3 controls the two-plasmon
+        contribution to Im fxc, and gets smaller as rs grows (low-density)
+    """
+    umask = omega >= 20*wcut
+    re_qv[umask] = np.sign(lval[0])*lval[1]*np.abs(lval[0]/omega[umask])**(3/2)
+    fxc_qv = re_qv + finf + 1.j*im_qv
+    return fxc_qv
 
 if __name__=="__main__":
 
