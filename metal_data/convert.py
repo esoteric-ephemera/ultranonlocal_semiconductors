@@ -29,7 +29,7 @@ def convert_to_csv():
                         dat.append(adat)
         np.savetxt(out_file,np.asarray(dat),delimiter=',',header=headers[ifile])
 
-def metal_plots():
+def metal_plots(sign_conv=1):
 
     olim = 10
     for sol in ['Al','Na']:
@@ -43,16 +43,25 @@ def metal_plots():
         om,alp_re['DLDA'],alp_im['DLDA'],alp_re['MCP07_k0'],alp_im['MCP07_k0'],alp_re['MCP07'],alp_im['MCP07'] = np.transpose(np.genfromtxt(flnm,delimiter=',',skip_header=1))
         wind = np.argmin(np.abs(om - olim/2))
         for ifxc,fxc in enumerate(['MCP07','MCP07_k0','DLDA']):
-            ax[0].plot(om,alp_re[fxc],color=clist[ifxc],linestyle=line_styles[ifxc])
-            ax[1].plot(om,alp_im[fxc],color=clist[ifxc],linestyle=line_styles[ifxc])
-            max_bd = max([max_bd,alp_re[fxc].max()])
-            min_bd = min([min_bd,alp_im[fxc].min()])
+            if sign_conv > 0:
+                # positive sign for sign convention that f_xc(q,omega) ~ (alpha + beta*omega**2)/q**2, a la Nazaraov & Vignale
+                max_bd = max([max_bd,alp_re[fxc].max()])
+                min_bd = min([min_bd,alp_im[fxc].min()])
+            elif sign_conv < 0:
+                # negative sign for sign convention that f_xc(q,omega) ~ -(alpha + beta*omega**2)/q**2, a la Botti & Reining
+                alp_re[fxc]*= -1
+                alp_im[fxc]*= -1
+                max_bd = max([max_bd,alp_im[fxc].max()])
+                min_bd = min([min_bd,alp_re[fxc].min()])
+            ax[0].plot(om,alp_re[fxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)])
+            ax[1].plot(om,alp_im[fxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)])
 
-        #ax[1].legend(fontsize=14)
-        #ax[0].set_yticks(np.arange(0.0,max_bd,.1))
-        #ax[1].set_yticks(np.arange(0.0,min_bd,-.1))
-        ax[0].set_ylim([0.0,1.1*max_bd])#ax[0].get_ylim()[1]])
-        ax[1].set_ylim([1.1*min_bd,0.0])
+        if sign_conv > 0:
+            ax[0].set_ylim([0.0,1.1*max_bd])
+            ax[1].set_ylim([1.1*min_bd,0.0])
+        elif sign_conv < 0:
+            ax[1].set_ylim([0.0,1.1*max_bd])
+            ax[0].set_ylim([1.1*min_bd,0.0])
         ax[1].set_xlabel('$\\omega$ (eV)',fontsize=16)
         ax[0].set_ylabel('$\\mathrm{Re}~\\alpha(\\omega)$',fontsize=16)
         ax[1].set_ylabel('$\\mathrm{Im}~\\alpha(\\omega)$',fontsize=16)
@@ -74,7 +83,7 @@ def metal_plots():
             if fxc == 'DLDA':
                 lbl = 'Dynamic LDA'
             elif fxc == 'MCP07_k0':
-                lbl = 'MCP07, $\\bar{k}=0$'
+                lbl = 'MCP07, $\\overline{k}=0$'
             else:
                 lbl = fxc
             if fxc == 'DLDA' and sol == 'Al':
@@ -82,7 +91,11 @@ def metal_plots():
             else:
                 offset = 0.01
             angle = 180/pi*np.arctan((p2[1]-p1[1])/(p2[0]-p1[0]))
-            ax[0].annotate(lbl,(olim/2,alp_re[fxc][wind]+offset),color=clist[ifxc],fontsize=12,rotation=angle)
+            if sign_conv<0:
+                fac = {'Al': {'DLDA':.2, 'MCP07': 3.5, 'MCP07_k0': 4},
+                'Na': {'DLDA':-.8, 'MCP07': 2.5, 'MCP07_k0': 3}}
+                offset *= -fac[sol][fxc]
+            ax[0].annotate(lbl,(olim/2,alp_re[fxc][wind]+offset),color=clist[ifxc],fontsize=14,rotation=angle)
         plt.subplots_adjust(top=.93)
         #plt.show()
         #exit()
@@ -113,7 +126,7 @@ def eps_c_plots():
             else:
                 i = 1
                 txtpos = (3.6,-0.06)
-                lbl = 'MCP07, $\\bar{k}=0$'
+                lbl = 'MCP07, $\\overline{k}=0$'
             ax.annotate(lbl,(0.5*(rs[i]+rs[i+1]),0.5*(epsc[fnl][i]+epsc[fnl][i+1])),xytext=txtpos,color=clist[ifnl],fontsize=12,arrowprops=dict(linewidth=1,color=clist[ifnl],arrowstyle='->'))
     ax.yaxis.set_major_locator(MultipleLocator(.01))
     ax.yaxis.set_minor_locator(MultipleLocator(.005))
@@ -123,11 +136,12 @@ def eps_c_plots():
     ax.set_ylabel('$\\varepsilon_{\\mathrm{c}}$ (hartree)',fontsize=14)
     ax.tick_params(axis='both',labelsize=12)
     #plt.show()
-    plt.savefig('./ueg_epsilon_c.pdf',dpi=600,bbox_inches='tight')
+    plt.savefig('../code/figs/ueg_epsilon_c.pdf',dpi=600,bbox_inches='tight')
+    plt.savefig('../code/eps_figs/ueg_epsilon_c.eps',dpi=600,bbox_inches='tight')
     return
 
 if __name__ == "__main__":
 
     #convert_to_csv()
-    metal_plots()
+    #metal_plots(sign_conv=-1)
     eps_c_plots()

@@ -3,7 +3,7 @@ from os.path import isfile
 from itertools import product
 import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
-
+import multiprocessing
 
 from constants import pi
 from mcp07 import exact_constraints,mcp07_dynamic,mcp07_static,gki_dynamic_real_freq,alda
@@ -102,15 +102,15 @@ def fxc_ifreq_fixed_grid(q,omega,dv,dinf_grid,dinf_wg,wfxc):
         fxc_tmp = fxc_selector(q,dinf_grid,dv,wfxc,grid=dinf_grid*(10*dv['wp0']),wg=dinf_wg*(10*dv['wp0']))
 
         for iw,w in enumerate(omega):
-            rintd = (w*fxc_tmp.real + dinf_grid*fxc_tmp.imag)/(dinf_grid**2 + w**2)
-            iintd = (-dinf_grid*fxc_tmp.real + w*fxc_tmp.imag)/(dinf_grid**2 + w**2)
+            rintd = (w*(fxc_tmp.real-finf) + dinf_grid*fxc_tmp.imag)/(dinf_grid**2 + w**2)
+            iintd = (-dinf_grid*(fxc_tmp.real-finf) + w*fxc_tmp.imag)/(dinf_grid**2 + w**2)
             fxc_iu.real[iw] = np.sum(dinf_wg*rintd)
             fxc_iu.imag[iw] = np.sum(dinf_wg*iintd)
     else:
 
         fxc_tmp = fxc_selector(q,dinf_grid,dv,wfxc,grid=dinf_grid*(10*dv['wp0']),wg=dinf_wg*(10*dv['wp0']))
-        rintd = (omega*fxc_tmp.real + dinf_grid*fxc_tmp.imag)/(dinf_grid**2 + omega**2)
-        iintd = (-dinf_grid*fxc_tmp.real + omega*fxc_tmp.imag)/(dinf_grid**2 + omega**2)
+        rintd = (omega*(fxc_tmp.real-finf) + dinf_grid*fxc_tmp.imag)/(dinf_grid**2 + omega**2)
+        iintd = (-dinf_grid*(fxc_tmp.real-finf) + omega*fxc_tmp.imag)/(dinf_grid**2 + omega**2)
         fxc_iu = np.sum(dinf_wg*(rintd + 1.j*iintd))
 
     return finf + fxc_iu/(2*pi)
@@ -219,7 +219,7 @@ def eps_c_plots():
         elif fnl == 'MCP07_k0':
             lbl = 'MCP07, $\\overline{k}=0$'
         ax.plot(rs,epsc[fnl],markersize=5,color=clist[fnl],linestyle=line_styles[fnl],label=lbl,linewidth=2.5)
-        if fnl in ['ALDAxc','RPA','PW92','DLDA']:
+        if fnl in ['ALDAxc','RPA','DLDA']:
             i = (rs.shape[0]-rs.shape[0]%2)//2
             offset = .0005
             p1 = ax.transData.transform_point((rs[i],epsc[fnl][i]))
@@ -235,7 +235,10 @@ def eps_c_plots():
                 txtpos = (3.6,-0.06)
             ax.annotate(lbl,(0.5*(rs[i]+rs[i+1]),0.5*(epsc[fnl][i]+epsc[fnl][i+1])),xytext=txtpos,color=clist[fnl],fontsize=16,arrowprops=dict(linewidth=2,color=clist[fnl],arrowstyle='->'))
         elif fnl == 'QV':
-            ax.annotate(lbl,(1.78,-0.02),color=clist[fnl],fontsize=16)
+            ax.annotate(lbl,(2.02,-0.02),color=clist[fnl],fontsize=16)
+        elif fnl == 'PW92':
+            i = 3*(rs.shape[0]-rs.shape[0]%4)//4
+            ax.annotate(lbl,(rs[i],epsc['PW92'][i]),(8,-0.04),color=clist[fnl],fontsize=16,arrowprops=dict(linewidth=2,color=clist[fnl],arrowstyle='->'))
     #ax.legend(fontsize=18)
     ax.yaxis.set_major_locator(MultipleLocator(.01))
     ax.yaxis.set_minor_locator(MultipleLocator(.005))
@@ -255,7 +258,13 @@ if __name__=="__main__":
     eps_c_plots()
     exit()
 
+    nproc = 4
     rss = np.linspace(1,10,101)
+
+    if nproc > 1:
+        pool = multiprocessing.Pool(processes=nproc)
+        ecdd = pool.map(get_eps_c_fixed_grid,rss)
+        pool.close()
 
     ofl = open('./data_files/jellium_eps_c.csv','w+')
     str = 'rs, PW92, '
@@ -265,8 +274,12 @@ if __name__=="__main__":
         else:
             str += '{:} \n'.format(fnl)
     ofl.write(str)
+
     for irs,rs in enumerate(rss):
-        ecd = get_eps_c_fixed_grid(rs)
+        if nproc == 1:
+            ecd = get_eps_c_fixed_grid(rs)
+        else:
+            ecd = ecdd[irs]
         str = '{:}, {:}, '.format(rs,ecd['PW92'])
         for ifnl,fnl in enumerate(to_do_list):
             if ifnl < len(to_do_list)-1:
@@ -278,11 +291,12 @@ if __name__=="__main__":
 
     """
     rs = 3
-    ginf,wginf,lgrid,lwg = make_grid(def_pts=200,cut_pt=50*(3/rs**3)**(0.5))
+    dv = density_variables(rs)
+    ginf,wginf,lgrid,lwg = make_grid(def_pts=200,cut_pt=50*dv['wp0'])
     dinf = np.concatenate((ginf,-ginf))
     dinfwg = np.concatenate((wginf,wginf))
 
-    dv = density_variables(rs)
+
     freqs = np.linspace(0,100*dv['wp0'],2000)
     fxc = fxc_longitudinal_fixed_grid(freqs,dv,dinf,dinfwg)#fxc_ifreq_fixed_grid(0.0,freqs,density_variables(4),dinf,dinfwg,'QV')
 
