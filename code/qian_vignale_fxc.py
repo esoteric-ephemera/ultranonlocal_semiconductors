@@ -208,12 +208,8 @@ def fxc_longitudinal(dv,omega):
 def fxc_longitudinal_fixed_grid(omega,dv,inf_grid,inf_wg):
 
     qvpars = get_qv_pars(dv)
-    wcut = max(dv['wp0'],np.abs(qvpars[2]).max())
     im_qv = im_fxc_longitudinal(omega,dv,pars=qvpars)
     _,finf=exact_constraints(dv,x_only=False,param='PW92')
-
-    re_qv = np.zeros(im_qv.shape[0])
-    twg = np.concatenate((inf_wg,inf_wg))
 
     w,igrid = np.meshgrid(omega,inf_grid)
     lgrid = -igrid + w - 1.e-10

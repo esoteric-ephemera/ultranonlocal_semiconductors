@@ -10,7 +10,7 @@ from mcp07 import exact_constraints,mcp07_dynamic,mcp07_static,gki_dynamic_real_
 from gauss_quad import gauss_quad
 from qian_vignale_fxc import fxc_longitudinal_fixed_grid,density_variables,get_qv_pars
 
-to_do_list = ['RPA','ALDA','DLDA','QV','MCP07 static','MCP07_k0','MCP07']
+to_do_list = ['RPA','ALDA','DLDA','QV','MCP07 static','MCP07_k0','MCP07']#'QV_MCP07',
 
 q_indep = ['DLDA','QV']
 w_indep = ['MCP07 static']
@@ -107,8 +107,9 @@ def fxc_ifreq_fixed_grid(q,omega,dv,inf_grid,inf_wg,wfxc):
         for iw,w in enumerate(omega):
             rintd = (w*(fxc_tmp.real-finf) + dinf_grid*fxc_tmp.imag)/(dinf_grid**2 + w**2)
             iintd = (-dinf_grid*(fxc_tmp.real-finf) + w*fxc_tmp.imag)/(dinf_grid**2 + w**2)
-            fxc_iu.real[iw] = np.sum(dinf_wg*rintd)
-            fxc_iu.imag[iw] = np.sum(dinf_wg*iintd)
+            fxc_iu[iw] = np.sum(dinf_wg*(rintd + 1.j*iintd))
+            #fxc_iu.real[iw] = np.sum(dinf_wg*rintd)
+            #fxc_iu.imag[iw] = np.sum(dinf_wg*iintd)
     else:
 
         fxc_tmp = fxc_selector(q,dinf_grid,dv,wfxc,grid=inf_grid,wg=inf_wg)
@@ -156,6 +157,11 @@ def get_eps_c_fixed_grid(rs):
             for ilam,alam in enumerate(lgrid):
                 wscl = wgr/alam
                 fxc_q_indep['DLDA'][ilam] = fxc_ifreq_fixed_grid(0.0,wscl,density_variables(rs*alam),ginf,wginf,'DLDA')
+    if 'QV' not in to_do_list and 'QV_MCP07' in to_do_list:
+        fxc_q_indep['QV'] = np.zeros((lgrid.shape[0],wgr.shape[0]),dtype='complex')
+        for ilam,alam in enumerate(lgrid):
+            wscl = wgr/alam
+            fxc_q_indep['QV'][ilam] = fxc_ifreq_fixed_grid(0.0,wscl,density_variables(rs*alam),ginf,wginf,'QV')
 
     chi0m = np.zeros((qgr.shape[0],wgr.shape[0]))
     for iq,aq in enumerate(qgr):
@@ -184,6 +190,10 @@ def get_eps_c_fixed_grid(rs):
                 elif fnl == 'MCP07_k0':
                     fxc_q,f0,akn = mcp07_static(q_scl,dv_scl,param='PZ81')
                     fxc = fxc_q_indep['DLDA'][ilam]/f0*fxc_q
+                elif fnl == 'QV_MCP07':
+                    fxc_q,f0_gki,akn = mcp07_static(q_scl,dv_scl,param='PW92')
+                    f0_qv = fxc_selector(0.0,0.0,dv_scl,'QV')
+                    fxc = (f0_qv + np.exp(-akn*q_scl**2)*(fxc_q_indep['QV'][ilam] - f0_qv))*fxc_q/f0_gki
                 else:
                     fxc = fxc_ifreq_fixed_grid(q_scl,w_scl,dv_scl,ginf,wginf,fnl)
                 fxch = fxc/alam + vc_scl
@@ -202,14 +212,14 @@ def eps_c_plots():
     #clist=['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:olive','tab:gray']
     ['darkblue','darkorange','darkgreen','darkred','black']
     clist = {'PW92':'black', 'RPA': 'darkblue', 'ALDAxc': 'purple', 'DLDA': 'tab:green', 'QV': 'tab:red',
-    'MCP07 static': 'tab:green', 'MCP07_k0': 'tab:orange', 'MCP07': 'tab:blue'}
-    line_styles={'PW92':'-', 'RPA': '--', 'ALDAxc': ':', 'DLDA': '-.', 'QV': '-',
+    'QV_MCP07': 'brown','MCP07 static': 'tab:green', 'MCP07_k0': 'tab:orange', 'MCP07': 'tab:blue',}
+    line_styles={'PW92':'-', 'RPA': '--', 'ALDAxc': ':', 'DLDA': '-.', 'QV': '-', 'QV_MCP07': '-.',
     'MCP07 static': ':', 'MCP07_k0': '--', 'MCP07': '-'}#['-','--','-.',':']
     mkrlist=['o','s','d','^','v','x','*','+']
 
     fig,ax = plt.subplots(figsize=(8,6))
     epsc = {}
-    rs,epsc['PW92'],epsc['RPA'],epsc['ALDAxc'],epsc['DLDA'],epsc['QV'],_,_,epsc['MCP07_k0'],epsc['MCP07'] = np.transpose(np.genfromtxt('./data_files/jellium_eps_c.csv',delimiter=',',skip_header=1))
+    rs,epsc['PW92'],epsc['RPA'],epsc['ALDAxc'],epsc['DLDA'],epsc['QV'],_,epsc['QV_MCP07'],_,_,epsc['MCP07_k0'],epsc['MCP07'] = np.transpose(np.genfromtxt('./data_files/jellium_eps_c.csv',delimiter=',',skip_header=1))
 
     ax.set_xlim([rs.min(),rs.max()])
     ax.set_ylim([-0.08,0.0])
@@ -257,8 +267,8 @@ def eps_c_plots():
 
 if __name__=="__main__":
 
-    eps_c_plots()
-    exit()
+    #eps_c_plots()
+    #exit()
 
     nproc = 4
     rss = np.linspace(1,10,101)
@@ -271,11 +281,11 @@ if __name__=="__main__":
     ofl = open('./data_files/jellium_eps_c.csv','w+')
     str = 'rs, PW92, '
     for ifnl,fnl in enumerate(to_do_list):
-        if fnl == 'QV':
+        if fnl == 'QV' or fnl == 'QV_MCP07':
             if ifnl < len(to_do_list)-1:
-                str += 'Re QV, Im QV,'
+                str += 'Re {:}, Im {:},'.format(fnl,fnl)
             else:
-                str += 'Re QV, Im QV,'
+                str += 'Re {:}, Im {:} \n'.format(fnl,fnl)
         else:
             if ifnl < len(to_do_list)-1:
                 str += '{:}, '.format(fnl)
@@ -290,7 +300,7 @@ if __name__=="__main__":
             ecd = ecdd[irs]
         str = '{:}, {:}, '.format(rs,ecd['PW92'])
         for ifnl,fnl in enumerate(to_do_list):
-            if fnl == 'QV':
+            if fnl == 'QV' or fnl == 'QV_MCP07':
                 if ifnl < len(to_do_list)-1:
                     str += '{:}, {:}, '.format(ecd[fnl].real,ecd[fnl].imag)
                 else:
