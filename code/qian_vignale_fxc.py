@@ -215,44 +215,17 @@ def fxc_longitudinal_fixed_grid(omega,dv,inf_grid,inf_wg):
     re_qv = np.zeros(im_qv.shape[0])
     twg = np.concatenate((inf_wg,inf_wg))
 
-    #lmask = omega < 20*wcut
-
     w,igrid = np.meshgrid(omega,inf_grid)
     lgrid = -igrid + w - 1.e-10
     im_qv_l = im_fxc_longitudinal(lgrid,dv,pars=qvpars)
+
     ugrid = w + 1.e-10 + igrid
     im_qv_u = im_fxc_longitudinal(ugrid,dv,pars=qvpars)
     intgd = im_qv_l/(lgrid - w) + im_qv_u/(ugrid - w)
+
     re_qv = np.einsum('i,ik->k',inf_wg,intgd)
-    #lval = [omega[lmask].max(),re_qv[lmask][-1]]
-    #umask = omega >= 20*wcut
-    #re_qv[umask] = np.sign(lval[0])*lval[1]*np.abs(lval[0]/omega[umask])**(3/2)
-    fxc_qv = re_qv + finf + 1.j*im_qv
-    return fxc_qv
+    fxc_qv = re_qv/pi + finf + 1.j*im_qv
 
-    for iw,w in enumerate(omega[omega < 20*wcut]):
-        """
-        lgrid = -inf_grid + w - 1.e-10
-        im_qv_l = im_fxc_longitudinal(lgrid,dv,pars=qvpars)
-        ugrid = w + 1.e-10 + inf_grid
-        im_qv_u = im_fxc_longitudinal(ugrid,dv,pars=qvpars)
-        intgd = im_qv_l/(lgrid - w) + im_qv_u/(ugrid - w)
-        """
-        tgrid = np.concatenate((-inf_grid + w - 1.e-10,w + 1.e-10 + inf_grid))
-        im_qv_tmp = im_fxc_longitudinal(tgrid,dv,pars=qvpars)
-        intgd = im_qv_tmp/(tgrid - w)
-        re_qv[iw] = np.sum(twg*intgd)/pi
-        lval = [w,re_qv[iw]]
-
-    """
-        we're kinda cheating here. Integral gets harder and harder to converge
-        as omega grows large. So we truncate the integral above 20*w_cut, where
-        w_cut = max(omega_p(0),Gamma_3). Gamma_3 controls the two-plasmon
-        contribution to Im fxc, and gets smaller as rs grows (low-density)
-    """
-    umask = omega >= 20*wcut
-    re_qv[umask] = np.sign(lval[0])*lval[1]*np.abs(lval[0]/omega[umask])**(3/2)
-    fxc_qv = re_qv + finf + 1.j*im_qv
     return fxc_qv
 
 if __name__=="__main__":

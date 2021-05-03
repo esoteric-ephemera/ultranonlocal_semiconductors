@@ -88,7 +88,10 @@ def make_grid(def_pts=200,cut_pt=2.0):
 
     return ogrid,owg,sgrid,swg
 
-def fxc_ifreq_fixed_grid(q,omega,dv,dinf_grid,dinf_wg,wfxc):
+def fxc_ifreq_fixed_grid(q,omega,dv,inf_grid,inf_wg,wfxc):
+
+    dinf_grid = np.concatenate((inf_grid,-inf_grid))
+    dinf_wg = np.concatenate((inf_wg,inf_wg))
 
     if wfxc in ['DLDA','MCP07_k0','MCP07']:
         _,finf = exact_constraints(dv,x_only=False,param='PZ81')
@@ -99,7 +102,7 @@ def fxc_ifreq_fixed_grid(q,omega,dv,dinf_grid,dinf_wg,wfxc):
 
         fxc_iu = np.zeros(omega.shape,dtype='complex')
 
-        fxc_tmp = fxc_selector(q,dinf_grid,dv,wfxc,grid=dinf_grid*(10*dv['wp0']),wg=dinf_wg*(10*dv['wp0']))
+        fxc_tmp = fxc_selector(q,dinf_grid,dv,wfxc,grid=inf_grid,wg=inf_wg)
 
         for iw,w in enumerate(omega):
             rintd = (w*(fxc_tmp.real-finf) + dinf_grid*fxc_tmp.imag)/(dinf_grid**2 + w**2)
@@ -108,7 +111,7 @@ def fxc_ifreq_fixed_grid(q,omega,dv,dinf_grid,dinf_wg,wfxc):
             fxc_iu.imag[iw] = np.sum(dinf_wg*iintd)
     else:
 
-        fxc_tmp = fxc_selector(q,dinf_grid,dv,wfxc,grid=dinf_grid*(10*dv['wp0']),wg=dinf_wg*(10*dv['wp0']))
+        fxc_tmp = fxc_selector(q,dinf_grid,dv,wfxc,grid=inf_grid,wg=inf_wg)
         rintd = (omega*(fxc_tmp.real-finf) + dinf_grid*fxc_tmp.imag)/(dinf_grid**2 + omega**2)
         iintd = (-dinf_grid*(fxc_tmp.real-finf) + omega*fxc_tmp.imag)/(dinf_grid**2 + omega**2)
         fxc_iu = np.sum(dinf_wg*(rintd + 1.j*iintd))
@@ -120,8 +123,6 @@ def get_eps_c_fixed_grid(rs):
     dv = density_variables(rs)
 
     ginf,wginf,lgrid,lwg = make_grid(def_pts=200,cut_pt=50*dv['wp0'])
-    dinf = np.concatenate((ginf,-ginf))
-    dinfwg = np.concatenate((wginf,wginf))
     qgr,qwg,lgrid,lwg = make_grid(def_pts=100,cut_pt=20*dv['kF'])
     #wgr,wwg,sgrid,swg = make_grid(def_pts=20,cut_pt=20*dv['wp0'])
     #qgr = 10*dv['kF']*lgrid
@@ -142,7 +143,7 @@ def get_eps_c_fixed_grid(rs):
             fxc_q_indep[fnl] = np.zeros((lgrid.shape[0],wgr.shape[0]),dtype='complex')
             for ilam,alam in enumerate(lgrid):
                 wscl = wgr/alam
-                fxc_q_indep[fnl][ilam] = fxc_ifreq_fixed_grid(0.0,wscl,density_variables(rs*alam),dinf,dinfwg,fnl)
+                fxc_q_indep[fnl][ilam] = fxc_ifreq_fixed_grid(0.0,wscl,density_variables(rs*alam),ginf,wginf,fnl)
         elif fnl in w_indep:
             fxc_w_indep[fnl] = np.zeros((qgr.shape[0],lgrid.shape[0]),dtype='complex')
             for iq,aq in enumerate(qgr):
@@ -154,7 +155,7 @@ def get_eps_c_fixed_grid(rs):
             fxc_q_indep['DLDA'] = np.zeros((lgrid.shape[0],wgr.shape[0]),dtype='complex')
             for ilam,alam in enumerate(lgrid):
                 wscl = wgr/alam
-                fxc_q_indep['DLDA'][ilam] = fxc_ifreq_fixed_grid(0.0,wscl,density_variables(rs*alam),dinf,dinfwg,'DLDA')
+                fxc_q_indep['DLDA'][ilam] = fxc_ifreq_fixed_grid(0.0,wscl,density_variables(rs*alam),ginf,wginf,'DLDA')
 
     chi0m = np.zeros((qgr.shape[0],wgr.shape[0]))
     for iq,aq in enumerate(qgr):
@@ -184,7 +185,7 @@ def get_eps_c_fixed_grid(rs):
                     fxc_q,f0,akn = mcp07_static(q_scl,dv_scl,param='PZ81')
                     fxc = fxc_q_indep['DLDA'][ilam]/f0*fxc_q
                 else:
-                    fxc = fxc_ifreq_fixed_grid(q_scl,w_scl,dv_scl,dinf,dinfwg,fnl)
+                    fxc = fxc_ifreq_fixed_grid(q_scl,w_scl,dv_scl,ginf,wginf,fnl)
                 fxch = fxc/alam + vc_scl
                 # Eq. 27 of Lein, Gross, and Perdew
                 ec[fnl] -= np.sum(chi0m[iq]**2*fxch/(1 - chi0m[iq]*fxch)*int_wg)
@@ -208,11 +209,12 @@ def eps_c_plots():
 
     fig,ax = plt.subplots(figsize=(8,6))
     epsc = {}
-    rs,epsc['PW92'],epsc['RPA'],epsc['ALDAxc'],epsc['DLDA'],epsc['QV'],_,epsc['MCP07_k0'],epsc['MCP07'] = np.transpose(np.genfromtxt('./data_files/jellium_eps_c.csv',delimiter=',',skip_header=1))
-    epsc['QV'] = epsc['QV'].real
+    rs,epsc['PW92'],epsc['RPA'],epsc['ALDAxc'],epsc['DLDA'],epsc['QV'],_,_,epsc['MCP07_k0'],epsc['MCP07'] = np.transpose(np.genfromtxt('./data_files/jellium_eps_c.csv',delimiter=',',skip_header=1))
+
     ax.set_xlim([rs.min(),rs.max()])
     ax.set_ylim([-0.08,0.0])
     for ifnl,fnl in enumerate(epsc):
+        epsc[fnl] = epsc[fnl].real
         lbl = fnl
         if fnl == 'DLDA':
             lbl = 'Dynamic LDA'
@@ -235,7 +237,7 @@ def eps_c_plots():
                 txtpos = (3.6,-0.06)
             ax.annotate(lbl,(0.5*(rs[i]+rs[i+1]),0.5*(epsc[fnl][i]+epsc[fnl][i+1])),xytext=txtpos,color=clist[fnl],fontsize=16,arrowprops=dict(linewidth=2,color=clist[fnl],arrowstyle='->'))
         elif fnl == 'QV':
-            ax.annotate(lbl,(2.02,-0.02),color=clist[fnl],fontsize=16)
+            ax.annotate(lbl,(2.02,-0.037),color=clist[fnl],fontsize=16)
         elif fnl == 'PW92':
             i = 3*(rs.shape[0]-rs.shape[0]%4)//4
             ax.annotate(lbl,(rs[i],epsc['PW92'][i]),(8,-0.04),color=clist[fnl],fontsize=16,arrowprops=dict(linewidth=2,color=clist[fnl],arrowstyle='->'))
@@ -269,10 +271,16 @@ if __name__=="__main__":
     ofl = open('./data_files/jellium_eps_c.csv','w+')
     str = 'rs, PW92, '
     for ifnl,fnl in enumerate(to_do_list):
-        if ifnl < len(to_do_list)-1:
-            str += '{:}, '.format(fnl)
+        if fnl == 'QV':
+            if ifnl < len(to_do_list)-1:
+                str += 'Re QV, Im QV,'
+            else:
+                str += 'Re QV, Im QV,'
         else:
-            str += '{:} \n'.format(fnl)
+            if ifnl < len(to_do_list)-1:
+                str += '{:}, '.format(fnl)
+            else:
+                str += '{:} \n'.format(fnl)
     ofl.write(str)
 
     for irs,rs in enumerate(rss):
@@ -282,10 +290,16 @@ if __name__=="__main__":
             ecd = ecdd[irs]
         str = '{:}, {:}, '.format(rs,ecd['PW92'])
         for ifnl,fnl in enumerate(to_do_list):
-            if ifnl < len(to_do_list)-1:
-                str += '{:}, '.format(ecd[fnl])
+            if fnl == 'QV':
+                if ifnl < len(to_do_list)-1:
+                    str += '{:}, {:}, '.format(ecd[fnl].real,ecd[fnl].imag)
+                else:
+                    str += '{:}, {:} \n'.format(ecd[fnl].real,ecd[fnl].imag)
             else:
-                str += '{:} \n'.format(ecd[fnl])
+                if ifnl < len(to_do_list)-1:
+                    str += '{:}, '.format(ecd[fnl])
+                else:
+                    str += '{:} \n'.format(ecd[fnl])
         ofl.write(str)
     ofl.close()
 
@@ -297,12 +311,12 @@ if __name__=="__main__":
     dinfwg = np.concatenate((wginf,wginf))
 
 
-    freqs = np.linspace(0,100*dv['wp0'],2000)
-    fxc = fxc_longitudinal_fixed_grid(freqs,dv,dinf,dinfwg)#fxc_ifreq_fixed_grid(0.0,freqs,density_variables(4),dinf,dinfwg,'QV')
+    freqs = np.linspace(0,50*dv['wp0'],2000)
+    fxc = fxc_longitudinal_fixed_grid(freqs,dv,ginf,wginf)#fxc_ifreq_fixed_grid(0.0,freqs,density_variables(4),dinf,dinfwg,'QV')
 
     import matplotlib.pyplot as plt
-    plt.plot(freqs/dv['wp0'],fxc.real)
-    plt.plot(freqs/dv['wp0'],fxc.imag)
+    plt.plot(freqs/dv['wp0'],fxc.real/(2*dv['wp0']/dv['n']))
+    plt.plot(freqs/dv['wp0'],fxc.imag/(2*dv['wp0']/dv['n']))
     plt.show()
     exit()
     """
