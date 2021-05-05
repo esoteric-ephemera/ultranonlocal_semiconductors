@@ -108,8 +108,6 @@ def fxc_ifreq_fixed_grid(q,omega,dv,inf_grid,inf_wg,wfxc):
             rintd = (w*(fxc_tmp.real-finf) + dinf_grid*fxc_tmp.imag)/(dinf_grid**2 + w**2)
             iintd = (-dinf_grid*(fxc_tmp.real-finf) + w*fxc_tmp.imag)/(dinf_grid**2 + w**2)
             fxc_iu[iw] = np.sum(dinf_wg*(rintd + 1.j*iintd))
-            #fxc_iu.real[iw] = np.sum(dinf_wg*rintd)
-            #fxc_iu.imag[iw] = np.sum(dinf_wg*iintd)
     else:
 
         fxc_tmp = fxc_selector(q,dinf_grid,dv,wfxc,grid=inf_grid,wg=inf_wg)
@@ -143,7 +141,7 @@ def get_eps_c_fixed_grid(rs):
         if fnl in q_indep:
             fxc_q_indep[fnl] = np.zeros((lgrid.shape[0],wgr.shape[0]),dtype='complex')
             for ilam,alam in enumerate(lgrid):
-                wscl = wgr/alam
+                wscl = wgr/alam**2
                 fxc_q_indep[fnl][ilam] = fxc_ifreq_fixed_grid(0.0,wscl,density_variables(rs*alam),ginf,wginf,fnl)
         elif fnl in w_indep:
             fxc_w_indep[fnl] = np.zeros((qgr.shape[0],lgrid.shape[0]),dtype='complex')
@@ -155,12 +153,12 @@ def get_eps_c_fixed_grid(rs):
         if 'MCP07' in to_do_list or 'MCP07_k0' in to_do_list:
             fxc_q_indep['DLDA'] = np.zeros((lgrid.shape[0],wgr.shape[0]),dtype='complex')
             for ilam,alam in enumerate(lgrid):
-                wscl = wgr/alam
+                wscl = wgr/alam**2
                 fxc_q_indep['DLDA'][ilam] = fxc_ifreq_fixed_grid(0.0,wscl,density_variables(rs*alam),ginf,wginf,'DLDA')
     if 'QV' not in to_do_list and 'QV_MCP07' in to_do_list:
         fxc_q_indep['QV'] = np.zeros((lgrid.shape[0],wgr.shape[0]),dtype='complex')
         for ilam,alam in enumerate(lgrid):
-            wscl = wgr/alam
+            wscl = wgr/alam**2
             fxc_q_indep['QV'][ilam] = fxc_ifreq_fixed_grid(0.0,wscl,density_variables(rs*alam),ginf,wginf,'QV')
 
     chi0m = np.zeros((qgr.shape[0],wgr.shape[0]))
@@ -187,6 +185,14 @@ def get_eps_c_fixed_grid(rs):
                 elif fnl == 'MCP07':
                     fxc_q,f0,akn = mcp07_static(q_scl,dv_scl,param='PZ81')
                     fxc = (1.0 + np.exp(-akn*q_scl**2)*(fxc_q_indep['DLDA'][ilam]/f0 - 1.0))*fxc_q
+                elif fnl == 'TC21':
+                    fp = {'a': 4.01, 'b': 1.21, 'c': 0.11, 'd': 1.07}
+                    fxc_q,f0,_ = mcp07_static(q_scl,dv_scl,param='PW92')
+                    kscr = fp['a']*dv_scl['kF']/(1.0 + fp['b']*dv_scl['kF']**(0.5))
+                    F1 = fp['c']*dv_scl['rs']**2
+                    F2 = F1 + (1.0 - F1)*np.exp(-fp['d']*(q_scl/kscr)**2)
+                    fxcw = fxc_ifreq_fixed_grid(0.0,F2*wscl,dv_scl,ginf,wginf,'DLDA')
+                    fxc = (1.0 + np.exp(-(q_scl/kscr)**2)*(fxcw/f0 - 1.0))*fxc_q
                 elif fnl == 'MCP07_k0':
                     fxc_q,f0,akn = mcp07_static(q_scl,dv_scl,param='PZ81')
                     fxc = fxc_q_indep['DLDA'][ilam]/f0*fxc_q
@@ -212,14 +218,18 @@ def eps_c_plots():
     #clist=['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:olive','tab:gray']
     ['darkblue','darkorange','darkgreen','darkred','black']
     clist = {'PW92':'black', 'RPA': 'darkblue', 'ALDAxc': 'purple', 'DLDA': 'tab:green', 'QV': 'tab:red',
-    'QV_MCP07': 'brown','MCP07 static': 'tab:green', 'MCP07_k0': 'tab:orange', 'MCP07': 'tab:blue',}
-    line_styles={'PW92':'-', 'RPA': '--', 'ALDAxc': ':', 'DLDA': '-.', 'QV': '-', 'QV_MCP07': '-.',
+    'QV hyb 1': 'brown', 'QV hyb 2': 'tab:green', 'MCP07 static': 'tab:green', 'MCP07_k0': 'tab:orange', 'MCP07': 'tab:blue'}
+    line_styles={'PW92':'-', 'RPA': '--', 'ALDAxc': ':', 'DLDA': '-.', 'QV': '-', 'QV hyb 1': '-.',  'QV hyb 2': ':',
     'MCP07 static': ':', 'MCP07_k0': '--', 'MCP07': '-'}#['-','--','-.',':']
     mkrlist=['o','s','d','^','v','x','*','+']
 
-    fig,ax = plt.subplots(figsize=(8,6))
+    fig,ax = plt.subplots(figsize=(10,6))
     epsc = {}
-    rs,epsc['PW92'],epsc['RPA'],epsc['ALDAxc'],epsc['DLDA'],epsc['QV'],_,epsc['QV_MCP07'],_,_,epsc['MCP07_k0'],epsc['MCP07'] = np.transpose(np.genfromtxt('./data_files/jellium_eps_c.csv',delimiter=',',skip_header=1))
+    #rs,epsc['PW92'],epsc['RPA'],epsc['ALDAxc'],epsc['DLDA'],epsc['QV'],_,_,epsc['MCP07_k0'],epsc['MCP07'] = np.transpose(np.genfromtxt('./data_files/jellium_eps_c.csv',delimiter=',',skip_header=1))
+    # header:
+    # rs, RPA, ALDA, Dyn. LDA, MCP07 static, MCP07 k=0, MCP07, Re QV, Im QV, Re QV-MCP07 TD, Im QV-MCP07 TD, Re QV-MCP07 TDC, Im QV-MCP07 TDC
+    rs,epsc['RPA'],epsc['ALDAxc'],epsc['DLDA'],_,epsc['MCP07_k0'],epsc['MCP07'],epsc['QV'],_,epsc['QV hyb 1'],_,epsc['QV hyb 2'],_ = np.transpose(np.genfromtxt('./data_files/jell_eps_c.csv',delimiter=',',skip_header=1))
+    epsc['PW92'] = eps_c_pw92_unpol(rs)
 
     ax.set_xlim([rs.min(),rs.max()])
     ax.set_ylim([-0.08,0.0])
@@ -230,7 +240,12 @@ def eps_c_plots():
             lbl = 'Dynamic LDA'
         elif fnl == 'MCP07_k0':
             lbl = 'MCP07, $\\overline{k}=0$'
+        elif fnl == 'QV hyb 1':
+            lbl = 'QV-MCP07, TD'
+        elif fnl == 'QV hyb 2':
+            lbl = 'QV-MCP07, TDC'
         ax.plot(rs,epsc[fnl],markersize=5,color=clist[fnl],linestyle=line_styles[fnl],label=lbl,linewidth=2.5)
+        """
         if fnl in ['ALDAxc','RPA','DLDA']:
             i = (rs.shape[0]-rs.shape[0]%2)//2
             offset = .0005
@@ -251,7 +266,8 @@ def eps_c_plots():
         elif fnl == 'PW92':
             i = 3*(rs.shape[0]-rs.shape[0]%4)//4
             ax.annotate(lbl,(rs[i],epsc['PW92'][i]),(8,-0.04),color=clist[fnl],fontsize=16,arrowprops=dict(linewidth=2,color=clist[fnl],arrowstyle='->'))
-    #ax.legend(fontsize=18)
+        """
+    ax.legend(fontsize=16,loc='lower right',ncol=2)
     ax.yaxis.set_major_locator(MultipleLocator(.01))
     ax.yaxis.set_minor_locator(MultipleLocator(.005))
     ax.xaxis.set_major_locator(MultipleLocator(2))
@@ -260,6 +276,7 @@ def eps_c_plots():
     ax.set_ylabel('$\\varepsilon_{\\mathrm{c}}$ (hartree)',fontsize=24)
     ax.tick_params(axis='both',labelsize=20)
     #plt.show()
+    #exit()
     plt.savefig('./figs/ueg_epsilon_c.pdf',dpi=600,bbox_inches='tight')
     plt.savefig('./eps_figs/ueg_epsilon_c.eps',dpi=600,bbox_inches='tight')
     return
@@ -267,7 +284,7 @@ def eps_c_plots():
 
 if __name__=="__main__":
 
-    #eps_c_plots()
+    eps_c_plots()
     #exit()
 
     nproc = 4

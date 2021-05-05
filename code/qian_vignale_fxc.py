@@ -226,6 +226,8 @@ def fxc_longitudinal_fixed_grid(omega,dv,inf_grid,inf_wg):
 
 if __name__=="__main__":
 
+    print(get_qv_pars(density_variables(1)))
+    exit()
     fit_mu_xc()
     exit()
 
