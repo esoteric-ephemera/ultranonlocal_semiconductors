@@ -75,33 +75,3 @@ subroutine mcp07_k0(q,freq,rs,nw,fxc)
   fxc = fxcw/f0*fxcq
 
 end subroutine mcp07_k0
-
-
-subroutine tc21_dynamic(q,freq,rs,nw,fxc)
-
-  implicit none
-  integer, parameter :: dp = selected_real_kind(15, 307)
-
-  real(dp), parameter :: pi = 3.14159265358979323846264338327950288419_dp
-  real(dp), parameter :: ca = 4.01_dp, cb = 1.21_dp, cc = 0.11_dp, cd = 1.07_dp
-
-  integer, intent(in) :: nw
-  real(dp), intent(in) :: q,rs
-  real(dp), dimension(nw), intent(in) :: freq
-  complex(dp), dimension(nw), intent(out) :: fxc
-
-  real(dp) :: kf,fxcq,f0,kscr,tmp,fscl,qdim2
-  complex(dp), dimension(nw) :: fxcw
-
-  call mcp07_static(q,rs,'PW92',fxcq,f0,tmp)
-
-  kf = (9*pi/4._dp)**(1._dp/3._dp)/rs
-  kscr = ca*kf/( 1._dp + cb*kf**(0.5_dp) )
-  qdim2 = (q/kscr)**2
-  fscl = cc*rs**2 + (1._dp - cc*rs**2)*exp(-cd*qdim2)
-
-  call gki_dynamic_real_freq(rs,fscl*freq,nw,'PW92',.true.,fxcw)
-
-  fxc = (1._dp + exp(-qdim2)*(fxcw/f0 - 1._dp))*fxcq
-
-end subroutine tc21_dynamic

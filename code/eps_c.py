@@ -185,14 +185,6 @@ def get_eps_c_fixed_grid(rs):
                 elif fnl == 'MCP07':
                     fxc_q,f0,akn = mcp07_static(q_scl,dv_scl,param='PZ81')
                     fxc = (1.0 + np.exp(-akn*q_scl**2)*(fxc_q_indep['DLDA'][ilam]/f0 - 1.0))*fxc_q
-                elif fnl == 'TC21':
-                    fp = {'a': 4.01, 'b': 1.21, 'c': 0.11, 'd': 1.07}
-                    fxc_q,f0,_ = mcp07_static(q_scl,dv_scl,param='PW92')
-                    kscr = fp['a']*dv_scl['kF']/(1.0 + fp['b']*dv_scl['kF']**(0.5))
-                    F1 = fp['c']*dv_scl['rs']**2
-                    F2 = F1 + (1.0 - F1)*np.exp(-fp['d']*(q_scl/kscr)**2)
-                    fxcw = fxc_ifreq_fixed_grid(0.0,F2*wscl,dv_scl,ginf,wginf,'DLDA')
-                    fxc = (1.0 + np.exp(-(q_scl/kscr)**2)*(fxcw/f0 - 1.0))*fxc_q
                 elif fnl == 'MCP07_k0':
                     fxc_q,f0,akn = mcp07_static(q_scl,dv_scl,param='PZ81')
                     fxc = fxc_q_indep['DLDA'][ilam]/f0*fxc_q
