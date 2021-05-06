@@ -87,10 +87,8 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
       !=========================================================================
       ! Dynamic GKI LDA
 
-      do iw = 1,nq
-        fxchv(iw) = vcscl + dlda_iw(ilam,iw)/alam
-        intgd(iw) = real(chi0(iq,iw)**2*fxchv(iw)/(1._dp - chi0(iq,iw)*fxchv(iw)))
-      end do
+      fxchv = vcscl + dlda_iw(ilam,:)/alam
+      intgd = real(chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:)))
 
       ec_dlda = ec_dlda - dot_product(wwg,intgd)*cwg
 
@@ -128,7 +126,7 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
       !=========================================================================
       ! QV-MCP07 hybrid, TDDFT static limit
 
-      qv0 = qv_static(rs*alam,.true.)
+      qv0 = qv_static(rscl,.true.)
       fxcv = (1._dp + exp(-akn*aq**2)*(qv_iw(ilam,:)/qv0 - 1._dp))*fxcq
       fxchv = vcscl + fxcv/alam
       intgdc = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
@@ -173,13 +171,7 @@ subroutine grid_gen(cpts,vpts,rs,digrid,diwg,&
 
   cut_pt = 50*wp0
 
-  write(ipts,'(I6)') cpts
-  open(unit=1,file='../grids/gauss_legendre_'//trim(adjustl(ipts))//'_pts.csv')
-  read(1,*)
-  do iter = 1,cpts
-    read(1,*) swg(iter),sgrid(iter)
-  end do
-  close(1)
+  call gauss_legendre(cpts,sgrid,swg)
 
   sgrid = 0.5_dp*(sgrid + 1._dp)
   swg = 0.5_dp*swg
@@ -191,13 +183,7 @@ subroutine grid_gen(cpts,vpts,rs,digrid,diwg,&
   digrid(2*cpts+1:4*cpts) = -digrid(1:2*cpts)
   diwg(2*cpts+1:4*cpts) = diwg(1:2*cpts)
 
-  write(ipts,'(I6)') vpts
-  open(unit=1,file='../grids/gauss_legendre_'//trim(adjustl(ipts))//'_pts.csv')
-  read(1,*)
-  do iter = 1,vpts
-    read(1,*) lwg(iter),lgrid(iter)
-  end do
-  close(1)
+  call gauss_legendre(vpts,lgrid,lwg)
 
   lgrid = 0.5_dp*(lgrid + 1._dp)
   lwg = 0.5_dp*lwg

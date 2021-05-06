@@ -209,23 +209,24 @@ def eps_c_plots():
 
     #clist=['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:olive','tab:gray']
     ['darkblue','darkorange','darkgreen','darkred','black']
-    clist = {'PW92':'black', 'RPA': 'darkblue', 'ALDAxc': 'purple', 'DLDA': 'tab:green', 'QV': 'tab:red',
-    'QV hyb 1': 'brown', 'QV hyb 2': 'tab:green', 'MCP07 static': 'tab:green', 'MCP07_k0': 'tab:orange', 'MCP07': 'tab:blue'}
-    line_styles={'PW92':'-', 'RPA': '--', 'ALDAxc': ':', 'DLDA': '-.', 'QV': '-', 'QV hyb 1': '-.',  'QV hyb 2': ':',
+    clist = {'PW92':'black', 'RPA': 'darkblue', 'ALDA': 'purple', 'DLDA': 'tab:green', 'QV': 'tab:red',
+    'QV hyb 1': 'brown', 'QV hyb 2': 'tab:green', 'MCP07 static': 'darkblue', 'MCP07_k0': 'tab:orange', 'MCP07': 'tab:blue'}
+    line_styles={'PW92':'-', 'RPA': '--', 'ALDA': ':', 'DLDA': '-.', 'QV': '-', 'QV hyb 1': '-.',  'QV hyb 2': ':',
     'MCP07 static': ':', 'MCP07_k0': '--', 'MCP07': '-'}#['-','--','-.',':']
     mkrlist=['o','s','d','^','v','x','*','+']
 
     fig,ax = plt.subplots(figsize=(10,6))
     epsc = {}
-    #rs,epsc['PW92'],epsc['RPA'],epsc['ALDAxc'],epsc['DLDA'],epsc['QV'],_,_,epsc['MCP07_k0'],epsc['MCP07'] = np.transpose(np.genfromtxt('./data_files/jellium_eps_c.csv',delimiter=',',skip_header=1))
+    #rs,epsc['PW92'],epsc['RPA'],epsc['ALDA'],epsc['DLDA'],epsc['QV'],_,_,epsc['MCP07_k0'],epsc['MCP07'] = np.transpose(np.genfromtxt('./data_files/jellium_eps_c.csv',delimiter=',',skip_header=1))
     # header:
     # rs, RPA, ALDA, Dyn. LDA, MCP07 static, MCP07 k=0, MCP07, Re QV, Im QV, Re QV-MCP07 TD, Im QV-MCP07 TD, Re QV-MCP07 TDC, Im QV-MCP07 TDC
-    rs,epsc['RPA'],epsc['ALDAxc'],epsc['DLDA'],_,epsc['MCP07_k0'],epsc['MCP07'],epsc['QV'],_,epsc['QV hyb 1'],_,epsc['QV hyb 2'],_ = np.transpose(np.genfromtxt('./data_files/jell_eps_c.csv',delimiter=',',skip_header=1))
+    rs,epsc['RPA'],epsc['ALDA'],epsc['DLDA'],epsc['MCP07 static'],epsc['MCP07_k0'],epsc['MCP07'],epsc['QV'],_,epsc['QV hyb 1'],_,epsc['QV hyb 2'],_ = np.transpose(np.genfromtxt('./data_files/jell_eps_c.csv',delimiter=',',skip_header=1))
     epsc['PW92'] = eps_c_pw92_unpol(rs)
 
     ax.set_xlim([rs.min(),rs.max()])
     ax.set_ylim([-0.08,0.0])
-    for ifnl,fnl in enumerate(epsc):
+
+    for ifnl,fnl in enumerate(['PW92','RPA','ALDA','DLDA','MCP07_k0','MCP07','QV']):
         epsc[fnl] = epsc[fnl].real
         lbl = fnl
         if fnl == 'DLDA':
@@ -238,7 +239,7 @@ def eps_c_plots():
             lbl = 'QV-MCP07, TDC'
         ax.plot(rs,epsc[fnl],markersize=5,color=clist[fnl],linestyle=line_styles[fnl],label=lbl,linewidth=2.5)
         """
-        if fnl in ['ALDAxc','RPA','DLDA']:
+        if fnl in ['ALDA','RPA','DLDA']:
             i = (rs.shape[0]-rs.shape[0]%2)//2
             offset = .0005
             p1 = ax.transData.transform_point((rs[i],epsc[fnl][i]))
@@ -271,13 +272,88 @@ def eps_c_plots():
     #exit()
     plt.savefig('./figs/ueg_epsilon_c.pdf',dpi=600,bbox_inches='tight')
     plt.savefig('./eps_figs/ueg_epsilon_c.eps',dpi=600,bbox_inches='tight')
+
+
+    plt.cla()
+    plt.clf()
+    fig,ax = plt.subplots(figsize=(10,6))
+
+    ax.set_xlim([rs.min(),rs.max()])
+    #ax.set_ylim([-0.08,0.0])
+    stats = {}
+    no_plot = ['PW92','MCP07 static']
+
+    for ifnl,fnl in enumerate(epsc):
+        stats[fnl] = [0.0,0.0,0.0]
+        dev = epsc[fnl]-epsc['PW92']
+        stats[fnl][0] = np.sum(dev)/rs.shape[0]
+        stats[fnl][1] = np.sum(np.abs(dev))/rs.shape[0]
+        stats[fnl][2] = (np.sum(dev**2)/rs.shape[0] - stats[fnl][0]**2)**(0.5)
+
+        if fnl in no_plot:
+            continue
+        epsc[fnl] = epsc[fnl].real
+        lbl = fnl
+        if fnl == 'DLDA':
+            lbl = 'Dynamic LDA'
+        elif fnl == 'MCP07_k0':
+            lbl = 'MCP07, $\\overline{k}=0$'
+        elif fnl == 'QV hyb 1':
+            lbl = 'QV-MCP07, TD'
+        elif fnl == 'QV hyb 2':
+            lbl = 'QV-MCP07, TDC'
+        ax.plot(rs,dev,markersize=5,color=clist[fnl],linestyle=line_styles[fnl],label=lbl,linewidth=2.5)
+    plt.legend(fontsize=16,bbox_to_anchor=(1,1.05),ncol=1)
+    ax.yaxis.set_major_locator(MultipleLocator(.005))
+    ax.yaxis.set_minor_locator(MultipleLocator(.0025))
+    ax.xaxis.set_major_locator(MultipleLocator(2))
+    ax.xaxis.set_minor_locator(MultipleLocator(1))
+    ax.hlines(0.0,ax.get_xlim()[0],ax.get_xlim()[1],linewidth=2,linestyle='-',color='black')
+    ax.set_xlabel('$r_{\\mathrm{s}}$ (bohr)',fontsize=24)
+    ax.set_ylabel('$\\varepsilon^{\\mathrm{approx.}}_{\\mathrm{c}}-\\varepsilon^{\\mathrm{PW92}}_{\\mathrm{c}}$ (hartree)',fontsize=24)
+    ax.tick_params(axis='both',labelsize=20)
+    #plt.show()
+    plt.savefig('./figs/ueg_epsilon_c_errs.pdf',dpi=600,bbox_inches='tight')
+    plt.savefig('./eps_figs/ueg_epsilon_c_errs.eps',dpi=600,bbox_inches='tight')
+
+    with open('./data_files/kernel_eps_c_errs.csv','w+') as ofl:
+        ofl.write(('rs_min={:}, rs_max={:}, # rs vals = {:} \n').format(rs.min(),rs.max(),rs.shape[0]))
+        ofl.write('Kernel, Mean error, MAE, Std. dev. \n')
+        for fnl in epsc:
+            if fnl == 'PW92':
+                continue
+            ofl.write(('{:}, {:}, {:}, {:}\n').format(fnl,*stats[fnl]))
+    with open('./data_files/kernel_eps_c_errs.tex','w+') as ofl:
+        ofl.write('Kernel & Mean error & Mean absolute error & Standard deviation \\\\ \n & $\\times 10^{-2}$ hartree & $\\times 10^{-2}$ hartree &  $\\times 10^{-3}$ hartree \\\\ \hline \n')
+        for fnl in epsc:
+            if fnl == 'DLDA':
+                lbl = 'Dynamic LDA'
+            elif fnl == 'MCP07_k0':
+                lbl = 'MCP07, $\\overline{k}=0$'
+            elif fnl == 'QV hyb 1':
+                lbl = 'QV-MCP07, TD'
+            elif fnl == 'QV hyb 2':
+                lbl = 'QV-MCP07, TDC'
+            else:
+                lbl=fnl
+
+            if fnl == 'PW92':
+                continue
+            ostr = '{:} & {:.4f} & {:.4f} & {:.4f} \\\\ \n'.format(lbl, 1e2*stats[fnl][0],1e2*stats[fnl][1],1e3*stats[fnl][2])
+            #num,fac = tstr.split('e')
+            #ostr = '{:} & {:} $\\times 10^{{{:}}}$ & '.format(fnl,num,int(fac))
+            #tstr = '{:.4e}'.format(1e3*stats[fnl][1])
+            #num,fac = tstr.split('e')
+            #ostr += '{:} $\\times 10^{{{:}}}$ \n'.format(num,int(fac))
+            ofl.write(ostr)
+
     return
 
 
 if __name__=="__main__":
 
     eps_c_plots()
-    #exit()
+    exit()
 
     nproc = 4
     rss = np.linspace(1,10,101)

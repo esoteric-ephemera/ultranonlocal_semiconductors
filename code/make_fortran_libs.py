@@ -13,8 +13,8 @@ post_opts = ''
 if sysid() == 'Darwin':
     post_opts = ' -L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib'
 
-targs = 'alda.f90 fxc.f90 mcp07.f90 gki_dlda.f90'
-targs_o = 'flib/{alda,fxc,mcp07,gki_dlda}.o'
+targs = 'alda.f90 fxc.f90 mcp07.f90 gki_dlda.f90 qv_dlda.f90 roots.f90'
+targs_o = 'jellium_correlation/{alda,fxc,mcp07,gki_dlda,qv_dlda,roots}.o'
 
 comp_str = compiler + compiler_opts +' -c '+ targs + post_opts
 print('===============================================================')
