@@ -31,7 +31,7 @@ program jellium_ec
     &    real(ec_qv_hyb1),',',aimag(ec_qv_hyb1),',',real(ec_qv_hyb2),',',&
     &    aimag(ec_qv_hyb2)
     write(2,'(a)') trim(adjustl(str))
-    
+
   end do
 
   close(2)

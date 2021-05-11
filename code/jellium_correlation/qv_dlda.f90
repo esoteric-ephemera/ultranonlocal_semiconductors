@@ -35,23 +35,24 @@ function mu_xc_n(rs)
 
 end function mu_xc_n
 
-function qv_static(rs,use_mu_xc)
+subroutine qv_static(rs,use_mu_xc,f0)
 
   implicit none
   integer, parameter :: dp = selected_real_kind(15, 307)
   real(dp), parameter :: pi = 3.14159265358979323846264338327950288419_dp
   logical,intent(in) :: use_mu_xc
   real(dp),intent(in) :: rs
-  real(dp) :: qv_static,n,mu_xc_n
+  real(dp),intent(out) :: f0
+  real(dp) :: n,mu_xc_n
 
-  call alda(rs,'PW92',qv_static)
+  call alda(rs,'PW92',f0)
   n = 3._dp/(4*pi*rs**3)
 
   if (use_mu_xc) then
-    qv_static = qv_static + 4._dp/3._dp*mu_xc_n(rs)/n
+    f0 = f0 + 4._dp/3._dp*mu_xc_n(rs)/n
   end if
 
-end function qv_static
+end subroutine qv_static
 
 
 subroutine get_qv_pars(rs,use_mu_xc,a3l,b3l,g3l,o3l)
@@ -79,12 +80,8 @@ subroutine get_qv_pars(rs,use_mu_xc,a3l,b3l,g3l,o3l)
   ! eq. 29
   b3l = 16._dp*(2._dp**10/(3*pi**8))**(1._dp/15._dp)*rs*(s3l/c3l)**(4._dp/5._dp)
 
-  call alda(rs,'PW92',f0)
   call high_freq(rs,'PW92',finf,dummy)
-
-  if (use_mu_xc) then
-    f0 = f0 + 4._dp/3._dp*mu_xc_n(rs)/n
-  end if
+  call qv_static(rs,use_mu_xc,f0)
   df = f0 - finf
 
   g3l = 1.d-14
@@ -156,7 +153,7 @@ subroutine im_fxc(omega,rs,nw,ca,cb,cg,co,imfxc)
 end subroutine im_fxc
 
 
-subroutine fxc_qv(omega,rs,nw,igrid,iwg,ng,fxc)
+subroutine fxc_qv(omega,rs,use_mu_xc,nw,igrid,iwg,ng,fxc)
 
   implicit none
   integer, parameter :: dp = selected_real_kind(15, 307)
@@ -165,6 +162,7 @@ subroutine fxc_qv(omega,rs,nw,igrid,iwg,ng,fxc)
   integer, intent(in) :: nw,ng
   real(dp), dimension(nw), intent(in) :: omega
   real(dp), intent(in) :: rs
+  logical, intent(in) :: use_mu_xc
   ! igrid should be a grid from 0 to infinity,
   ! iwg should be the corresponding integration weights
   real(dp), dimension(ng), intent(in) :: igrid,iwg
@@ -176,7 +174,7 @@ subroutine fxc_qv(omega,rs,nw,igrid,iwg,ng,fxc)
   real(dp),dimension(ng) :: ugrid,lgrid,imfxc1,imfxc2
 
   ! first get QV parameters for given rs
-  call get_qv_pars(rs,.true.,ca,cb,cg,co)
+  call get_qv_pars(rs,use_mu_xc,ca,cb,cg,co)
   ! then the imaginary part of fxc
   call im_fxc(omega,rs,nw,ca,cb,cg,co,imfxc)
   ! and the infinite frequency limit of fxc

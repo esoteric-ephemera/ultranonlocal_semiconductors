@@ -14,7 +14,7 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
   real(dp), parameter :: pi = 3.14159265358979323846264338327950288419_dp
 
   integer :: iq,ilam,iw,ndi,nq
-  real(dp) :: aq,alam, rscl,vcscl,fxc,fxcq,fxch,cwg,f0,qv0,akn,qv_static
+  real(dp) :: aq,alam, rscl,vcscl,fxc,fxcq,fxch,cwg,f0,qv0,akn
   complex(dp), dimension(2*nlam) :: fxcv, fxchv
   real(dp), dimension(4*ninf) :: digr,diwg
   real(dp), dimension(2*ninf) :: igr,iwg
@@ -22,7 +22,7 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
   complex(dp), dimension(2*nlam) :: intgdc
   real(dp), dimension(nlam) :: lgr,lwg
   real(dp), dimension(2*nlam,2*nlam) :: chi0
-  complex(dp), dimension(nlam,2*nlam) :: dlda_iw, qv_iw
+  complex(dp), dimension(nlam,2*nlam) :: dlda_iw, qv_iw_td,qv_iw_tdc
 
   ndi=4*ninf ; nq = 2*nlam
 
@@ -51,7 +51,9 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
     ! Get GKI dynamic LDA on imaginary frequency axis using Cauchy integral
     call fxc_gki_ifreq(intgd,rscl,nq,digr,diwg,ndi,dlda_iw(ilam,:))
     ! same for QV
-    call fxc_qv_ifreq(intgd,rscl,nq,digr,diwg,ndi,igr,iwg,2*ninf,qv_iw(ilam,:))
+    call fxc_qv_ifreq(intgd,rscl,.true.,nq,digr,diwg,ndi,igr,iwg,2*ninf,qv_iw_tdc(ilam,:))
+    ! now QV with the TD-DFT static limit
+    call fxc_qv_ifreq(intgd,rscl,.false.,nq,digr,diwg,ndi,igr,iwg,2*ninf,qv_iw_td(ilam,:))
   end do
 
   do iq = 1,nq
@@ -119,15 +121,15 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
       !=========================================================================
       ! QV dynamic LDA
 
-      fxchv = vcscl + qv_iw(ilam,:)/alam
+      fxchv = vcscl + qv_iw_tdc(ilam,:)/alam
       intgdc = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
       ec_qv = ec_qv - dot_product(wwg,intgdc)*cwg
 
       !=========================================================================
       ! QV-MCP07 hybrid, TDDFT static limit
 
-      qv0 = qv_static(rscl,.true.)
-      fxcv = (1._dp + exp(-akn*aq**2)*(qv_iw(ilam,:)/qv0 - 1._dp))*fxcq
+      call mcp07_static(aq,rscl,'PW92',fxcq,f0,akn)
+      fxcv = (1._dp + exp(-akn*aq**2)*(qv_iw_td(ilam,:)/f0 - 1._dp))*fxcq
       fxchv = vcscl + fxcv/alam
       intgdc = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
       ec_qv_hyb1 = ec_qv_hyb1 - dot_product(wwg,intgdc)*cwg
@@ -135,7 +137,8 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
       !=========================================================================
       ! QV-MCP07 hybrid, TDCDFT static limit
 
-      fxcv = (1._dp + exp(-akn*aq**2)*(qv_iw(ilam,:)/qv0 - 1._dp))*fxcq*qv0/f0
+      call mcp07_static(aq,rscl,'doqv',fxcq,f0,akn)
+      fxcv = (1._dp + exp(-akn*aq**2)*(qv_iw_tdc(ilam,:)/f0 - 1._dp))*fxcq
       fxchv = vcscl + fxcv/alam
       intgdc = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
       ec_qv_hyb2 = ec_qv_hyb2 - dot_product(wwg,intgdc)*cwg

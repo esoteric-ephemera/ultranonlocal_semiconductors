@@ -210,8 +210,8 @@ def eps_c_plots():
     #clist=['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:olive','tab:gray']
     ['darkblue','darkorange','darkgreen','darkred','black']
     clist = {'PW92':'black', 'RPA': 'darkblue', 'ALDA': 'purple', 'DLDA': 'tab:green', 'QV': 'tab:red',
-    'QV hyb 1': 'brown', 'QV hyb 2': 'tab:green', 'MCP07 static': 'darkblue', 'MCP07_k0': 'tab:orange', 'MCP07': 'tab:blue'}
-    line_styles={'PW92':'-', 'RPA': '--', 'ALDA': ':', 'DLDA': '-.', 'QV': '-', 'QV hyb 1': '-.',  'QV hyb 2': ':',
+    'QV hyb 1': 'brown', 'QV hyb 2': 'tab:green','QV hyb 3': 'gray', 'MCP07 static': 'darkblue', 'MCP07_k0': 'tab:orange', 'MCP07': 'tab:blue'}
+    line_styles={'PW92':'-', 'RPA': '--', 'ALDA': ':', 'DLDA': '-.', 'QV': '-', 'QV hyb 1': '-.',  'QV hyb 2': ':', 'QV hyb 3': '--',
     'MCP07 static': ':', 'MCP07_k0': '--', 'MCP07': '-'}#['-','--','-.',':']
     mkrlist=['o','s','d','^','v','x','*','+']
 

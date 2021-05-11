@@ -94,14 +94,15 @@ subroutine fxc_gki_ifreq(w,rs,nw,digrid,diwg,ng,ifxc)
 end subroutine fxc_gki_ifreq
 
 
-subroutine fxc_qv_ifreq(w,rs,nw,digrid,diwg,ng,igrid,iwg,ni,ifxc)
+subroutine fxc_qv_ifreq(w,rs,use_mu_xc,nw,digrid,diwg,ng,igrid,iwg,ni,ifxc)
 
   implicit none
   integer, parameter :: dp = selected_real_kind(15, 307)
   real(dp), parameter :: pi = 3.14159265358979323846264338327950288419_dp
 
   integer, intent(in) :: nw,ng,ni
-  real(dp) :: rs
+  real(dp),intent(in) :: rs
+  logical, intent(in) :: use_mu_xc
   real(dp), dimension(nw), intent(in) :: w
   real(dp), dimension(ng), intent(in) :: digrid,diwg
   real(dp), dimension(ni), intent(in) :: igrid,iwg
@@ -114,7 +115,7 @@ subroutine fxc_qv_ifreq(w,rs,nw,digrid,diwg,ng,igrid,iwg,ni,ifxc)
 
   call high_freq(rs,'PW92',finf,tmp)
 
-  call fxc_qv(digrid,rs,ng,igrid,iwg,ni,fxc_tmp)
+  call fxc_qv(digrid,rs,use_mu_xc,ng,igrid,iwg,ni,fxc_tmp)
 
   do iw = 1,nw
     denom = digrid**2 + w(iw)**2

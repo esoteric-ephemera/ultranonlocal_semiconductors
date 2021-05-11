@@ -16,10 +16,15 @@ subroutine mcp07_static(q,rs,param,fxc,f0,akn)
   rsh = rs**(0.5_dp)
   bn = (1._dp + 2.15_dp*rsh + 0.435_dp*rsh**3)/(3._dp + 1.57_dp*rsh + 0.409_dp*rsh**3)
 
-  call alda(rs,param,f0)
+  if (param=='doqv') then
+    call qv_static(rs,.true.,f0)
+    call lda_derivs(rs,'PW92',ec,d_ec_drs)
+  else
+    call alda(rs,param,f0)
+    call lda_derivs(rs,param,ec,d_ec_drs)
+  end if
   akn = -f0/(4*pi*bn)
 
-  call lda_derivs(rs,param,ec,d_ec_drs)
   d_rs_ec_drs = ec + rs*d_ec_drs
   kf = (9*pi/4._dp)**(1._dp/3._dp)/rs
   cn = -pi/(2*kf)*d_rs_ec_drs
