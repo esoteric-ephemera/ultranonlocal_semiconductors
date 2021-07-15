@@ -220,7 +220,7 @@ def eps_c_plots():
     #rs,epsc['PW92'],epsc['RPA'],epsc['ALDA'],epsc['DLDA'],epsc['QV'],_,_,epsc['MCP07_k0'],epsc['MCP07'] = np.transpose(np.genfromtxt('./data_files/jellium_eps_c.csv',delimiter=',',skip_header=1))
     # header:
     # rs, RPA, ALDA, Dyn. LDA, MCP07 static, MCP07 k=0, MCP07, Re QV, Im QV, Re QV-MCP07 TD, Im QV-MCP07 TD, Re QV-MCP07 TDC, Im QV-MCP07 TDC
-    rs,epsc['RPA'],epsc['ALDA'],epsc['DLDA'],epsc['MCP07 static'],epsc['MCP07_k0'],epsc['MCP07'],epsc['QV'],_,epsc['QV hyb 1'],_,epsc['QV hyb 2'],_ = np.transpose(np.genfromtxt('./data_files/jell_eps_c.csv',delimiter=',',skip_header=1))
+    rs,epsc['RPA'],epsc['ALDA'],epsc['DLDA'],epsc['MCP07 static'],epsc['MCP07_k0'],epsc['MCP07'],epsc['QV'],epsc['QV hyb 1'],epsc['QV hyb 2'] = np.transpose(np.genfromtxt('./data_files/jell_eps_c.csv',delimiter=',',skip_header=1))
     epsc['PW92'] = eps_c_pw92_unpol(rs)
 
     ax.set_xlim([rs.min(),rs.max()])
@@ -404,9 +404,9 @@ if __name__=="__main__":
     ginf,wginf,lgrid,lwg = make_grid(def_pts=200,cut_pt=50*dv['wp0'])
     dinf = np.concatenate((ginf,-ginf))
     dinfwg = np.concatenate((wginf,wginf))
+    from qian_vignale_fxc import im_fxc_longitudinal
 
-
-    freqs = np.linspace(0,50*dv['wp0'],2000)
+    freqs = np.linspace(-50*dv['wp0'],50*dv['wp0'],2001)
     fxc = fxc_longitudinal_fixed_grid(freqs,dv,ginf,wginf)#fxc_ifreq_fixed_grid(0.0,freqs,density_variables(4),dinf,dinfwg,'QV')
 
     import matplotlib.pyplot as plt

@@ -1,6 +1,6 @@
 import numpy as np
 
-from constants import pi
+from constants import pi#,crystal
 from mcp07 import exact_constraints,alda
 from integrators import nquad
 
@@ -183,31 +183,35 @@ def im_fxc_longitudinal(omega,dv,pars=()):
 
     return imfxc
 
-def wrap_kram_kron(to,omega,dv):
-    return im_fxc_longitudinal(to,dv)/(to - omega)
+def wrap_kram_kron(to,omega,dv,qvpars):
+    return im_fxc_longitudinal(to,dv,pars=qvpars)/(to - omega)
 
-def kram_kron(omega,dv):
-    return nquad(wrap_kram_kron,('-inf','inf'),'global_adap',{'itgr':'GK','prec':1.e-6,'npts':5,'min_recur':4,'max_recur':1000,'n_extrap':400,'inf_cond':'fun'},pars_ops={'PV':[omega]},args=(omega,dv))
+def kram_kron(omega,dv,qvpars):
+    tprec = 1.e-6
+    #if crystal == 'C':
+    #    tprec = 1.e-6
+    return nquad(wrap_kram_kron,('-inf','inf'),'global_adap',{'itgr':'GK','prec':tprec, 'npts':7,'min_recur':4,'max_recur':1000,'n_extrap':400,'inf_cond':'fun'}, pars_ops={'PV':[omega]},args=(omega,dv,qvpars))
 
-def fxc_longitudinal(dv,omega):
+def fxc_longitudinal(dv,omega,use_mu_xc=True):
 
-    im_fxc = im_fxc_longitudinal(omega,dv)
+    qvps = get_qv_pars(dv,use_mu_xc=use_mu_xc)
+    im_fxc = im_fxc_longitudinal(omega,dv,pars=qvps)
     _,finf=exact_constraints(dv,x_only=False,param='PW92')
     if hasattr(omega,'__len__'):
         re_fxc = np.zeros(omega.shape)
         for iom,om in enumerate(omega):
-            re_fxc[iom],terr = kram_kron(om,dv)
+            re_fxc[iom],terr = kram_kron(om,dv,qvps)
             if terr['code'] == 0:
                 print(('WARNING, not converged for omega={:.4f}; last error {:.4e}').format(om,terr['error']))
     else:
-        re_fxc,terr = kram_kron(omega,dv)
+        re_fxc,terr = kram_kron(omega,dv,qvps)
         if terr['code'] == 0:
             print(('WARNING, not converged for omega={:.4f}; last error {:.4e}').format(omega,terr['error']))
     return re_fxc/pi + finf + 1.j*im_fxc
 
-def fxc_longitudinal_fixed_grid(omega,dv,inf_grid,inf_wg):
+def fxc_longitudinal_fixed_grid(omega,dv,inf_grid,inf_wg,use_mu_xc=False):
 
-    qvpars = get_qv_pars(dv)
+    qvpars = get_qv_pars(dv,use_mu_xc=use_mu_xc)
     im_qv = im_fxc_longitudinal(omega,dv,pars=qvpars)
     _,finf=exact_constraints(dv,x_only=False,param='PW92')
 

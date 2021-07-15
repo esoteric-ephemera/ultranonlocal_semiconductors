@@ -105,11 +105,8 @@ def chi_parser(z,omega,ixn,rs,wfxc,reduce_omega=False,imag_freq=False,ret_eps=Fa
         fxc = mcp07_dynamic(q,om,dvars,axis=which_axis,param='PZ81')
     elif wfxc == 'static MCP07':
         fxc,_,_ = mcp07_static(q,dvars,param='PZ81')
-    elif wfxc == 'rMCP07':
-        fxc = mcp07_dynamic(q,om,dvars,axis=which_axis,revised=True,pars=pars,param=LDA)
     elif wfxc == 'GKI':
-        fxc = gki_dynamic(dvars,om,axis=which_axis,revised=True,param=LDA,use_par=True)
-        #fxc =  alda(dvars,param=LDA) + (np.exp(-dvars['rs'])-1.0)*fxc
+        fxc = gki_dynamic(dvars,om,axis=which_axis,param=LDA,use_par=True)
     else:
         raise SystemExit('WARNING, unrecognized XC kernel',wfxc)
 
@@ -129,31 +126,16 @@ def chi_parser(z,omega,ixn,rs,wfxc,reduce_omega=False,imag_freq=False,ret_eps=Fa
 
     return chi
 
-def mcp07_dynamic(q,omega,dv,axis='real',revised=False,pars={},param='PZ81',no_k=False):
+def mcp07_dynamic(q,omega,dv,axis='real',param='PZ81',no_k=False):
 
     fxc_q,f0,akn = mcp07_static(q,dv,param=param)
-    if revised:
-        if len(pars) > 0:
-            fp = pars
+    fxc_omega = gki_dynamic(dv,omega,axis=axis,param=param,use_par=True)
+    if no_k:
+        if hasattr(akn,'__len__'):
+            akn = np.zeros(akn.shape)
         else:
-            raise SystemExit('rMCP07 kernel requires fit parameters!')
-        kscr = fp['a']*dv['kF']/(1.0 + fp['b']*dv['kF']**(0.5))
-        #F1 = (fp['a'] + fp['b']*fp['c']*dv['rs'])/(1.0 + fp['c']*dv['rs'])*dv['rs']**2
-        #rs_interp = (fp['a'] + fp['b']*fp['d']*dv['rs']**fp['c'])/(1.0 + fp['d']*dv['rs']**fp['c'])
-        F1 = fp['c']*dv['rs']**2#3/(1.0 + fp['d']*dv['rs'])#(1.0 + fp['c']*dv['rs']**3)/(1.0 + fp['d']*dv['rs'])
-        F2 = F1 + (1.0 - F1)*np.exp(-fp['d']*(q/kscr)**2)
-        #ixn_inv = dv['rs']**2*q*omega**(0.5)
-        #F2 = 1.0 + (fp['c'] - 1.0)*ixn_inv/(1.0 + ixn_inv)
-        fxc_omega = gki_dynamic(dv,F2*omega,axis=axis,revised=revised,param=param,use_par=True)
-        fxc = (1.0 + np.exp(-(q/kscr)**2)*(fxc_omega/f0 - 1.0))*fxc_q
-    else:
-        fxc_omega = gki_dynamic(dv,omega,axis=axis,revised=revised,param=param,use_par=True)
-        if no_k:
-            if hasattr(akn,'__len__'):
-                akn = np.zeros(akn.shape)
-            else:
-                akn = 0.0
-        fxc = (1.0 + np.exp(-akn*q**2)*(fxc_omega/f0 - 1.0))*fxc_q
+            akn = 0.0
+    fxc = (1.0 + np.exp(-akn*q**2)*(fxc_omega/f0 - 1.0))*fxc_q
 
     return fxc
 
@@ -326,7 +308,7 @@ def exact_constraints(dv,x_only=False,param='PZ81'):
 
     return bn,finf
 
-def gki_dynamic_real_freq(dv,u,x_only=False,revised=False,param='PZ81',dimensionless=False):
+def gki_dynamic_real_freq(dv,u,x_only=False,param='PZ81',dimensionless=False):
 
     if dimensionless:
         xk = u
@@ -341,59 +323,29 @@ def gki_dynamic_real_freq(dv,u,x_only=False,revised=False,param='PZ81',dimension
 
     gx = xk/((1.0 + xk**2)**(5.0/4.0))
 
-    if revised:
-        apar = 0.1756
-        bpar = 1.0376
-        cpar = 2.9787
-        powr = 7.0/(2*cpar)
-        hx = 1.0/gam*(1.0 - apar*xk**2)
-        hx /= (1.0 + bpar*xk**2 + (apar/gam)**(1.0/powr)*xk**cpar)**powr
-    else:
-        aj = 0.63
-        h0 = 1.0/gam
-        hx = h0*(1.0 - aj*xk**2)
-        fac = (h0*aj)**(4.0/7.0)
-        hx /= (1.0 + fac*xk**2)**(7.0/4.0)
+    aj = 0.63
+    h0 = 1.0/gam
+    hx = h0*(1.0 - aj*xk**2)
+    fac = (h0*aj)**(4.0/7.0)
+    hx /= (1.0 + fac*xk**2)**(7.0/4.0)
 
-    isscalar=False
-    if not hasattr(u,'__len__'):
-        if hasattr(dv['rs'],'__len__'):
-            fxcu = np.zeros(dv['rs'].shape,dtype=complex)
-        else:
-            isscalar=True
-    else:
-        fxcu = np.zeros(u.shape,dtype=complex)
     if dimensionless:
-        if isscalar:
-            fxcu = hx + 1.j*gx
-        else:
-            fxcu.real = hx
-            fxcu.imag = gx
+        fxcu = hx + 1.j*gx
     else:
-        if isscalar:
-            fxcu = finf - cc*bn**(3.0/4.0)*hx -cc*bn**(3.0/4.0)*gx*1.j
-        else:
-            fxcu.real = finf - cc*bn**(3.0/4.0)*hx
-            fxcu.imag = -cc*bn**(3.0/4.0)*gx
+        fxcu = finf - cc*bn**(3.0/4.0)*(hx + 1.j*gx)
+
+
     return fxcu
 
-def gki_dynamic(dv,u,axis='real',x_only=False,revised=False,param='PZ81',use_par=False):
+def gki_dynamic(dv,u,axis='real',x_only=False,param='PZ81',use_par=False):
 
-    #if not hasattr(u,'__len__'):
-    #    u = u*np.ones(1)
     if axis == 'real':
-        fxcu = gki_dynamic_real_freq(dv,u,x_only=x_only,revised=revised,param=param)
+        fxcu = gki_dynamic_real_freq(dv,u,x_only=x_only,param=param)
     elif axis == 'imag':
-        fxcu = np.zeros(u.shape)
         bn,finf = exact_constraints(dv,x_only=x_only,param=param)
-        if use_par:
-            if not revised and not x_only and param == 'PZ81':
-                cpars = [1.06971,1.52708]#[1.06971136,1.52708142] # higher precision values destabilize the integration
-                interp = 1.0/gam/(1.0 + (u.imag*bn**(0.5))**cpars[0])**cpars[1]
-            elif revised and not x_only and param == 'PW92':
-                cpars = [0.99711536, 1.36722527, 0.93805229, 0.0101391,  0.71194338]
-                xr = u.imag*bn**(0.5)
-                interp = 1.0/gam*(1.0 - cpars[3]*xr**cpars[4])/(1.0 + cpars[2]*xr**cpars[0])**cpars[1]
+        if use_par and not x_only and param == 'PZ81':
+            cpars = [1.06971,1.52708]#[1.06971136,1.52708142] # higher precision values destabilize the integration
+            interp = 1.0/gam/(1.0 + (u.imag*bn**(0.5))**cpars[0])**cpars[1]
             fxcu = -cc*bn**(3.0/4.0)*interp + finf
         else:
             def wrap_integrand(tt,freq,rescale=False):
@@ -404,23 +356,31 @@ def gki_dynamic(dv,u,axis='real',x_only=False,revised=False,param='PZ81',use_par
                 else:
                     to = tt
                     d_to_d_tt = 1.0
-                tfxc = gki_dynamic_real_freq(dv,to,x_only=x_only,revised=revised,param=param,dimensionless=True)
+                tfxc = gki_dynamic_real_freq(dv,to,x_only=x_only,param=param,dimensionless=True)
                 num = freq*tfxc.real + to*tfxc.imag
                 denom = to**2 + freq**2
                 return num/denom*d_to_d_tt
-            for itu,tu in enumerate(u):
-                rf = tu.imag*bn[itu]**(0.5)
-                fxcu[itu],err = nquad(wrap_integrand,(-1.0,1.0),'global_adap',{'itgr':'GK','npts':5,'prec':1.e-8},args=(rf,),kwargs={'rescale':True})
+            if hasattr(u,'__len__'):
+                for itu,tu in enumerate(u):
+                    rf = tu.imag*bn[itu]**(0.5)
+                    fxcu[itu],err = nquad(wrap_integrand,(-1.0,1.0),'global_adap',{'itgr':'GK','npts':5,'prec':1.e-8},args=(rf,),kwargs={'rescale':True})
+                    if err['error'] != err['error']:
+                        fxcu[itu],err = nquad(wrap_integrand,(0.0,'inf'),'global_adap',{'itgr':'GK','npts':5,'prec':1.e-8},args=(rf,))
+                    if err['code'] == 0:
+                        print(('WARNING, analytic continuation failed; error {:}').format(err['error']))
+                    fxcu[itu] = -cc*bn[itu]**(3.0/4.0)*fxcu[itu]/pi + finf[itu]
+            else:
+                rf = u.imag*bn**(0.5)
+                fxcu,err = nquad(wrap_integrand,(-1.0,1.0),'global_adap',{'itgr':'GK','npts':5,'prec':1.e-8},args=(rf,),kwargs={'rescale':True})
                 if err['error'] != err['error']:
-                    fxcu[itu],err = nquad(wrap_integrand,(0.0,'inf'),'global_adap',{'itgr':'GK','npts':5,'prec':1.e-8},args=(rf,))
+                    fxcu,err = nquad(wrap_integrand,(0.0,'inf'),'global_adap',{'itgr':'GK','npts':5,'prec':1.e-8},args=(rf,))
                 if err['code'] == 0:
                     print(('WARNING, analytic continuation failed; error {:}').format(err['error']))
-                fxcu[itu] = -cc*bn[itu]**(3.0/4.0)*fxcu[itu]/pi + finf[itu]
+                fxcu = -cc*bn**(3.0/4.0)*fxcu/pi + finf
     return fxcu
 
 if __name__ == "__main__":
 
-    import matplotlib.pyplot as plt
     q = np.arange(0.01,3.01,0.01)
     rsl = [1,4,10,30,69,100]
     for rs in rsl:
@@ -438,38 +398,3 @@ if __name__ == "__main__":
         #fxc,_,_ = mcp07_static(0.5*q,q,dvars,param='PW92')
         #plt.plot(q,-fxc,label='$r_s=$'+str(rs))
     exit()
-    plt.xlim([0,3])
-    plt.yscale('log')
-    plt.xlabel('$q/k_F$',fontsize=12)
-    plt.ylabel('$-f_{xc}(q,\omega=0)$',fontsize=12)
-    #plt.ylim([-500,-15.310303787092149])
-    plt.legend(ncol=(len(rsl)-3))
-    plt.show()
-    exit()
-
-    bn,finf = exact_constraints(dvars,param='PW92')
-    #w,fxcu = np.transpose(np.genfromtxt('./rMCP07_re_fxc.csv',delimiter=',',skip_header=1))
-    #fxcu = -cc*bn**(3.0/4.0)*fxcu/gam + finf
-    w = np.linspace(0.0001,20.01,2000)
-    fxcu = gki_dynamic(dvars,1.j*w,axis='imag',x_only=False,revised=True,param='PW92')
-    #np.savetxt('./rMCP07_re_fxc.csv',np.transpose((w,fxcu)),delimiter=',',header='omega, re fxc dimensionless')
-    #exit()
-    """
-
-    w,fxcu = np.transpose(np.genfromtxt('./rMCP07_re_fxc.csv',delimiter=',',skip_header=1))
-    from scipy.optimize import curve_fit
-    def interp(x,a,b,c,d,f):
-        return( 1.0-d*x**f)/(1.0 + c*x**a)**b
-    pars,cov = curve_fit(interp,w,fxcu)
-    print(pars,cov)
-    exit()
-
-    import matplotlib.pyplot as plt
-    fxcu = gki_dynamic(dvars,1.j*w,axis='imag',x_only=False,revised=True,param='PW92')
-    plt.plot(w,fxcu)
-    plt.plot(w,finf*np.ones(w.shape))
-    #plt.ylim(-16,-3)
-    plt.xlim(0,10)
-    plt.show()
-    exit()
-    #"""

@@ -65,10 +65,10 @@ subroutine fxc_gki_ifreq(w,rs,nw,digrid,diwg,ng,ifxc)
   real(dp), parameter :: pi = 3.14159265358979323846264338327950288419_dp
 
   integer, intent(in) :: nw,ng
-  real(dp) :: rs
+  real(dp), intent(in) :: rs
   real(dp), dimension(nw), intent(in) :: w
   real(dp), dimension(ng), intent(in) :: digrid,diwg
-  complex(dp), dimension(nw), intent(out) :: ifxc
+  real(dp), dimension(nw), intent(out) :: ifxc
 
   integer :: iw
   real(dp) :: finf,tmp
@@ -82,8 +82,8 @@ subroutine fxc_gki_ifreq(w,rs,nw,digrid,diwg,ng,ifxc)
   do iw = 1,nw
     denom = digrid**2 + w(iw)**2
     integrand = ( w(iw)*(real(fxc_tmp) - finf) + digrid*aimag(fxc_tmp) )
-    integrand = integrand + ( -digrid*(real(fxc_tmp) - finf)&
-  &    + w(iw)*aimag(fxc_tmp) )*cmplx(0._dp,1._dp)
+  !  integrand = integrand + ( -digrid*(real(fxc_tmp) - finf)&
+  !&    + w(iw)*aimag(fxc_tmp) )*cmplx(0._dp,1._dp)
 
     ifxc(iw) = dot_product(diwg, integrand/denom)
 
@@ -106,7 +106,7 @@ subroutine fxc_qv_ifreq(w,rs,use_mu_xc,nw,digrid,diwg,ng,igrid,iwg,ni,ifxc)
   real(dp), dimension(nw), intent(in) :: w
   real(dp), dimension(ng), intent(in) :: digrid,diwg
   real(dp), dimension(ni), intent(in) :: igrid,iwg
-  complex(dp), dimension(nw), intent(out) :: ifxc
+  real(dp), dimension(nw), intent(out) :: ifxc
 
   integer :: iw
   real(dp) :: finf,tmp
@@ -120,8 +120,8 @@ subroutine fxc_qv_ifreq(w,rs,use_mu_xc,nw,digrid,diwg,ng,igrid,iwg,ni,ifxc)
   do iw = 1,nw
     denom = digrid**2 + w(iw)**2
     integrand = ( w(iw)*(real(fxc_tmp) - finf) + digrid*aimag(fxc_tmp) )
-    integrand = integrand + ( -digrid*(real(fxc_tmp) - finf)&
-  &    + w(iw)*aimag(fxc_tmp) )*cmplx(0._dp,1._dp)
+    !integrand = integrand + ( -digrid*(real(fxc_tmp) - finf)&
+  !&    + w(iw)*aimag(fxc_tmp) )*cmplx(0._dp,1._dp)
 
     ifxc(iw) = dot_product(diwg, integrand/denom)
   end do

@@ -8,21 +8,20 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
   integer, intent(in) :: ninf, nlam
   real(dp), intent(in) :: rs
   real(dp),intent(out) :: ec_rpa, ec_alda, ec_dlda, ec_mcp07_stat
-  real(dp),intent(out) :: ec_mcp07_k0, ec_mcp07
-  complex(dp),intent(out) :: ec_qv,ec_qv_hyb1,ec_qv_hyb2
+  real(dp),intent(out) :: ec_mcp07_k0, ec_mcp07,ec_qv,ec_qv_hyb1,ec_qv_hyb2
 
   real(dp), parameter :: pi = 3.14159265358979323846264338327950288419_dp
 
   integer :: iq,ilam,iw,ndi,nq
   real(dp) :: aq,alam, rscl,vcscl,fxc,fxcq,fxch,cwg,f0,qv0,akn
-  complex(dp), dimension(2*nlam) :: fxcv, fxchv
+  real(dp), dimension(2*nlam) :: fxcv, fxchv
   real(dp), dimension(4*ninf) :: digr,diwg
   real(dp), dimension(2*ninf) :: igr,iwg
   real(dp), dimension(2*nlam) :: qgr,qwg,wgr,wwg,vc,intgd
-  complex(dp), dimension(2*nlam) :: intgdc
+  !complex(dp), dimension(2*nlam) :: intgdc
   real(dp), dimension(nlam) :: lgr,lwg
   real(dp), dimension(2*nlam,2*nlam) :: chi0
-  complex(dp), dimension(nlam,2*nlam) :: dlda_iw, qv_iw_td,qv_iw_tdc
+  real(dp), dimension(nlam,2*nlam) :: dlda_iw, qv_iw_td,qv_iw_tdc
 
   ndi=4*ninf ; nq = 2*nlam
 
@@ -90,7 +89,7 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
       ! Dynamic GKI LDA
 
       fxchv = vcscl + dlda_iw(ilam,:)/alam
-      intgd = real(chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:)))
+      intgd = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
 
       ec_dlda = ec_dlda - dot_product(wwg,intgd)*cwg
 
@@ -98,8 +97,8 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
       ! Static MCP07
 
       call mcp07_static(aq,rscl,'PZ81',fxcq,f0,akn)
-      fxch = vcscl + fxcq/alam
-      intgd = chi0(iq,:)**2*fxch/(1._dp - chi0(iq,:)*fxch)
+      fxchv = vcscl + fxcq/alam
+      intgd = chi0(iq,:)**2*fxchv/(1._dp - chi0(iq,:)*fxchv)
       ec_mcp07_stat = ec_mcp07_stat - dot_product(wwg,intgd)*cwg
 
       !=========================================================================
@@ -107,7 +106,7 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
 
       fxcv = fxcq/f0*dlda_iw(ilam,:)
       fxchv = vcscl + fxcv(:)/alam
-      intgd = real(chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:)))
+      intgd = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
       ec_mcp07_k0 = ec_mcp07_k0 - dot_product(wwg,intgd)*cwg
 
       !=========================================================================
@@ -115,15 +114,15 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
 
       fxcv = (1._dp + exp(-akn*aq**2)*(dlda_iw(ilam,:)/f0 - 1._dp))*fxcq
       fxchv = vcscl + fxcv/alam
-      intgd = real(chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:)))
+      intgd = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
       ec_mcp07 = ec_mcp07 - dot_product(wwg,intgd)*cwg
 
       !=========================================================================
       ! QV dynamic LDA
 
       fxchv = vcscl + qv_iw_tdc(ilam,:)/alam
-      intgdc = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
-      ec_qv = ec_qv - dot_product(wwg,intgdc)*cwg
+      intgd = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
+      ec_qv = ec_qv - dot_product(wwg,intgd)*cwg
 
       !=========================================================================
       ! QV-MCP07 hybrid, TDDFT static limit
@@ -131,8 +130,8 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
       call mcp07_static(aq,rscl,'PW92',fxcq,f0,akn)
       fxcv = (1._dp + exp(-akn*aq**2)*(qv_iw_td(ilam,:)/f0 - 1._dp))*fxcq
       fxchv = vcscl + fxcv/alam
-      intgdc = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
-      ec_qv_hyb1 = ec_qv_hyb1 - dot_product(wwg,intgdc)*cwg
+      intgd = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
+      ec_qv_hyb1 = ec_qv_hyb1 - dot_product(wwg,intgd)*cwg
 
       !=========================================================================
       ! QV-MCP07 hybrid, TDCDFT static limit
@@ -140,8 +139,8 @@ subroutine get_eps_c(ninf,nlam,rs,ec_rpa,ec_alda,ec_dlda,&
       call mcp07_static(aq,rscl,'doqv',fxcq,f0,akn)
       fxcv = (1._dp + exp(-akn*aq**2)*(qv_iw_tdc(ilam,:)/f0 - 1._dp))*fxcq
       fxchv = vcscl + fxcv/alam
-      intgdc = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
-      ec_qv_hyb2 = ec_qv_hyb2 - dot_product(wwg,intgdc)*cwg
+      intgd = chi0(iq,:)**2*fxchv(:)/(1._dp - chi0(iq,:)*fxchv(:))
+      ec_qv_hyb2 = ec_qv_hyb2 - dot_product(wwg,intgd)*cwg
 
     end do
   end do
@@ -193,7 +192,7 @@ subroutine grid_gen(cpts,vpts,rs,digrid,diwg,&
 
   wgr(1:vpts) = cut_pt*lgrid
   wwg(1:vpts) = cut_pt*lwg
-  wgr(vpts+1:2*vpts) = -log(lgrid*exp(-cut_pt))
+  wgr(vpts+1:2*vpts) = cut_pt - log(lgrid)
   wwg(vpts+1:2*vpts) = lwg/lgrid
 
   cut_pt = 20*kf

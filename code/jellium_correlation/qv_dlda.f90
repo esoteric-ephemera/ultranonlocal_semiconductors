@@ -127,7 +127,7 @@ end subroutine get_qv_pars
 
 
 
-subroutine im_fxc(omega,rs,nw,ca,cb,cg,co,imfxc)
+subroutine im_fxc_qv(omega,rs,nw,ca,cb,cg,co,imfxc)
 
   implicit none
   integer, parameter :: dp = selected_real_kind(15, 307)
@@ -150,7 +150,7 @@ subroutine im_fxc(omega,rs,nw,ca,cb,cg,co,imfxc)
   &    + wt**2*exp(-(abs(wt)-co)**2/cg) )
   end do
 
-end subroutine im_fxc
+end subroutine im_fxc_qv
 
 
 subroutine fxc_qv(omega,rs,use_mu_xc,nw,igrid,iwg,ng,fxc)
@@ -176,7 +176,7 @@ subroutine fxc_qv(omega,rs,use_mu_xc,nw,igrid,iwg,ng,fxc)
   ! first get QV parameters for given rs
   call get_qv_pars(rs,use_mu_xc,ca,cb,cg,co)
   ! then the imaginary part of fxc
-  call im_fxc(omega,rs,nw,ca,cb,cg,co,imfxc)
+  call im_fxc_qv(omega,rs,nw,ca,cb,cg,co,imfxc)
   ! and the infinite frequency limit of fxc
   call high_freq(rs,'PW92',finf,dummy)
 
@@ -185,9 +185,9 @@ subroutine fxc_qv(omega,rs,use_mu_xc,nw,igrid,iwg,ng,fxc)
 
     w = omega(iw)
     lgrid = -igrid + w - 1.d-10
-    call im_fxc(lgrid,rs,ng,ca,cb,cg,co,imfxc1)
+    call im_fxc_qv(lgrid,rs,ng,ca,cb,cg,co,imfxc1)
     ugrid = igrid + w + 1.d-10
-    call im_fxc(ugrid,rs,ng,ca,cb,cg,co,imfxc2)
+    call im_fxc_qv(ugrid,rs,ng,ca,cb,cg,co,imfxc2)
 
     fxc(iw) = dot_product(iwg,imfxc1/(lgrid - w) + imfxc2/(ugrid - w))
 

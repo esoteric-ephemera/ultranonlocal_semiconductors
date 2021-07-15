@@ -178,11 +178,17 @@ def nquad(fun,ttbd,method,opts,pars_ops={},args=(),kwargs={}):
             return dbl_exp(fun,bds,opts,args=args,kwargs=kwargs)
 #-------------------------------------------------------------------------------
 
+    nreg = 1
+    if ttbd[0] == '-inf':
+        nreg += 1
+    if ttbd[1] == 'inf':
+        nreg += 1
+
     if 'PV' in pars_ops: # for handling numeric principal value integrals
         if 'prec' in opts:
-            opts['prec']/=len(pars_ops['PV'])+1
+            opts['prec'] /= nreg + len(pars_ops['PV'])
         else:
-            opts['prec']=1.e-6/(len(pars_ops['PV'])+1)
+            opts['prec']=1.e-6/(nreg + len(pars_ops['PV']))
         eps = 1.e-12
         if 'PV_eps' in pars_ops: # if the tolerance on epsilon is too tight, or too loose
             eps = pars_ops['PV_eps'] # can be set via pars_ops
@@ -201,6 +207,10 @@ def nquad(fun,ttbd,method,opts,pars_ops={},args=(),kwargs={}):
             errf['error'] += terr['error']
 
     else: # for handling everything else
+        if 'prec' in opts:
+            opts['prec']/= nreg
+        else:
+            opts['prec']=1.e-6/nreg
         intf,errf = nquad_core(ttbd)
 
     return intf,errf

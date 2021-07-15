@@ -8,9 +8,10 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from constants import crystal,pi,Eh_to_eV
 #from gauss_quad import gauss_quad
-from mcp07 import chi_parser,mcp07_dynamic,gki_dynamic_real_freq
+from mcp07 import chi_parser,mcp07_dynamic,mcp07_static,gki_dynamic_real_freq
 from qian_vignale_fxc import fxc_longitudinal as qv_fxc
 from pseudo_pt import get_n_g
+from fhnc_2p2h import fxc_2p2h_lin_interp
 
 metal_regex = ['Al','Na']
 semicond_regex = ['Si','C']
@@ -18,7 +19,7 @@ if crystal in semicond_regex:
     from discrete_ft_n import dft_n
     from discrete_ft_n import oflnm as ft_dens_file
 
-bigrange = False
+bigrange = True
 use_multiprocesing = True
 for adir in ['./figs', './eps_figs']:
     if not path.isdir(adir):
@@ -30,21 +31,27 @@ ulim_d = {'Si':25.0, 'C':25.0, 'Al': 250.0, 'Na': 100.0}
 def get_len(vec):
     return np.sum(vec**2)**(0.5)
 
-def wrap_kernel(q,omega,n,wfxc):
+def get_dens_vars_from_n(n):
     dv = {}
     dv['n'] = n
     dv['kF'] = (3*pi**2*n)**(1/3)
     dv['rs'] = (3/(4*pi*n))**(1/3)
     dv['rsh'] = dv['rs']**(0.5)
     dv['wp0'] = (3/dv['rs']**3)**(0.5)
+    return dv
+
+def wrap_kernel(q,omega,n,wfxc):
+    dv = get_dens_vars_from_n(n)
     if wfxc == 'MCP07':
-        fxc = mcp07_dynamic(q,omega,dv,axis='real',revised=False,param='PZ81',no_k=False)
+        fxc = mcp07_dynamic(q,omega,dv,axis='real',param='PZ81',no_k=False)
     elif wfxc == 'MCP07_k0':
-        fxc = mcp07_dynamic(q,omega,dv,axis='real',revised=False,param='PZ81',no_k=True)
+        fxc = mcp07_dynamic(q,omega,dv,axis='real',param='PZ81',no_k=True)
     elif wfxc == 'DLDA':
-        fxc=gki_dynamic_real_freq(dv,omega,x_only=False,revised=False,param='PZ81',dimensionless=False)
+        fxc=gki_dynamic_real_freq(dv,omega,x_only=False,param='PZ81',dimensionless=False)
     elif wfxc == 'QV':
-        fxc = qv_fxc(dv,omega)
+        fxc = qv_fxc(dv,omega,use_mu_xc=True)
+    elif wfxc == 'QV_MCP07_TD' or wfxc == 'QV_TD':
+        fxc = qv_fxc(dv,omega,use_mu_xc=False)
     else:
         raise ValueError('Unknown XC kernel, ', wfxc)
     return fxc
@@ -112,7 +119,7 @@ def init_n_g(solid):
     return gmod,np.abs(ng0)**2,n_0_bar
 
 
-def calc_alpha(fxcl,):
+def calc_alpha(fxcl):
 
     dyn_only_regex = ['DLDA','QV']
 
@@ -126,27 +133,56 @@ def calc_alpha(fxcl,):
         ulim = 400.0
     else:
         ulim = ulim_d[crystal]
-    omega_l = np.linspace(0.0,ulim,500)/Eh_to_eV
+    Nw = 500
+    omega_l = np.linspace(0.0,ulim,Nw)/Eh_to_eV
 
     if bigrange:
         addn = '_bigrange'
     else:
         addn = ''
 
+    if use_multiprocesing:
+        nproc = 4
+    else:
+        nproc = 1
+
+    if '2p2h' in fxcl:
+        wcut_2p2h = 3.98*(4*pi*n_0_bar)**(0.5)
+        fxcdyn = fxc_2p2h_lin_interp((3/(4*pi*n_0_bar))**(1/3),gmod,omega_l)
+
+    fxc_g0_dyn = {}
+    fxc_g_dyn = {}
+    tmp_multi = []
+    if 'QV_MCP07_TD' in fxcl:
+        tmp_multi.append('QV_MCP07_TD')
+    if 'QV' in fxcl:
+        tmp_multi.append('QV')
+    for fxc in tmp_multi:
+        pool = mp.Pool(processes=nproc)
+        fxc_g_tmp = pool.starmap(wrap_kernel,product([0.0],omega_l,[n_0_bar],[fxc]))
+        pool.close()
+        fxc_g_dyn[fxc] = np.zeros(Nw,dtype='complex')
+        for ifxc in range(Nw):
+            fxc_g_dyn[fxc][ifxc] = fxc_g_tmp[ifxc]
+
+        if omega_l[0]==0.0:
+            fxc_g0_dyn[fxc] = fxc_g_dyn[fxc][0]
+        else:
+            fxc_g0_dyn[fxc] = wrap_kernel(0.0,0.0,n_0_bar,fxc)
+
+    if 'DLDA' in fxcl:
+        fxc_g0_dyn['DLDA'] = wrap_kernel(0.0,0.0,n_0_bar,'DLDA')
+        fxc_g_dyn['DLDA'] = wrap_kernel(0.0,omega_l,n_0_bar,'DLDA')
+
     for fxc in fxcl:
 
-        if fxc == 'QV' and use_multiprocesing:
-            nproc = 4
-        else:
-            nproc = 1
-
-        # only need to evaluate zero-frequency term once
         if fxc in dyn_only_regex:
-            fxc_g0 = wrap_kernel(0.0,0.0,n_0_bar,fxc)
-            if nproc == 1:
-                # also only need to evaluate f_xc[n](q=0,omega) once
-                fxc_g = wrap_kernel(0.0,omega_l,n_0_bar,fxc)
-        else:
+            fxc_g0 = fxc_g0_dyn[fxc]
+            fxc_g = fxc_g_dyn[fxc]
+        elif fxc == 'QV_MCP07_TD':
+            dv_tmp = get_dens_vars_from_n(n_0_bar)
+            fxc_stat_tmp,f_alda,k_mcp07 = mcp07_static(gmod,dv_tmp,param='PW92')
+        elif fxc != '2p2h':
             if nproc == 1:
                 fxc_g0 = wrap_kernel(gmod,0.0,n_0_bar,fxc)
             else:
@@ -157,40 +193,42 @@ def calc_alpha(fxcl,):
                 for ifxcg in range(Ng):
                     fxc_g0[ifxcg] = fxc_g0_tmp[ifxcg]
 
-        alpha = np.zeros(omega_l.shape[0],dtype='complex')
+        alpha = np.zeros(Nw,dtype='complex')
 
         ofl = wdir+'alpha_omega_'+fxc+addn+'.csv'
         intwg = 1.0/3.0
-        if fxc in dyn_only_regex and nproc > 1:
-            pool = mp.Pool(processes=nproc)
-            fxc_g_tmp = pool.starmap(wrap_kernel,product([0.0],omega_l,[n_0_bar],[fxc]))
-            pool.close()
-            fxc_g = np.zeros(omega_l.shape[0],dtype='complex')
-            for ifxcg in range(omega_l.shape[0]):
-                fxc_g[ifxcg] = fxc_g_tmp[ifxcg]
+
         for iom,om in enumerate(omega_l):
+
             if fxc in dyn_only_regex:
                 fxc_diff = fxc_g[iom] - fxc_g0
-            else:
-                if nproc == 1:
-                    fxc_g = wrap_kernel(gmod,om,n_0_bar,fxc)
+            elif fxc == 'QV_MCP07_TD':
+                fxc_g0 = (1 + np.exp(-k_mcp07*gmod**2)*(fxc_g0_dyn['QV_MCP07_TD']/f_alda - 1))*fxc_stat_tmp
+                fxc_g = (1 + np.exp(-k_mcp07*gmod**2)*(fxc_g_dyn['QV_MCP07_TD'][iom]/f_alda - 1))*fxc_stat_tmp
+                fxc_diff = fxc_g - fxc_g0
+            elif fxc == '2p2h':
+                # maximum tabulated value for 2p2h kernel is 3.98 omega_p(0)
+                if om <= wcut_2p2h:
+                    fxc_diff = fxcdyn[:,iom] - fxcdyn[:,0]
                 else:
-                    pool = mp.Pool(processes=nproc)
-                    fxc_g_tmp = pool.starmap(wrap_kernel,product(gmod,[om],[n_0_bar],[fxc]))
-                    pool.close()
-                    fxc_g = np.zeros(Ng,dtype='complex')
-                    for ifxcg in range(Ng):
-                        fxc_g[ifxcg] = fxc_g_tmp[ifxcg]
+                    break
+            else:
+                fxc_g = wrap_kernel(gmod,om,n_0_bar,fxc)
                 fxc_diff = fxc_g - fxc_g0
             alpha[iom] = intwg*np.sum(g_dot_q_hat*fxc_diff*ng02)/n_avg2
 
-        np.savetxt(ofl,np.transpose((omega_l,alpha.real,alpha.imag)),delimiter=',',header='omega (a.u.), Re alpha(w), Im alpha(w)')
+        if fxc == '2p2h':
+            wmask = omega_l <= wcut_2p2h
+            np.savetxt(ofl,np.transpose((omega_l[wmask],alpha.real[wmask],alpha.imag[wmask])),delimiter=',',header='omega (a.u.), Re alpha(w), Im alpha(w)')
+        else:
+            np.savetxt(ofl,np.transpose((omega_l,alpha.real,alpha.imag)),delimiter=',',header='omega (a.u.), Re alpha(w), Im alpha(w)')
+
 
     return
 
 def plotter(fxcl,sign_conv=1):
 
-    clist=['tab:blue','tab:orange','tab:green','tab:red','tab:purple','tab:brown','tab:olive','tab:gray']
+    clist=['darkblue','darkorange','darkgreen','darkred','indigo','black','tab:olive','tab:gray']
     line_styles=['-','--','-.']
 
     if bigrange:
@@ -229,8 +267,9 @@ def plotter(fxcl,sign_conv=1):
             alp_im[anfxc]*= -1
             max_bd = max([max_bd,alp_im[anfxc].max()])
             min_bd = min([min_bd,alp_re[anfxc].min()])
-        ax[0].plot(om[anfxc],alp_re[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)],linewidth=2)
-        ax[1].plot(om[anfxc],alp_im[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)],linewidth=2)
+        ax[0].plot(om[anfxc],alp_re[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)],linewidth=2,label=anfxc)
+        ax[1].plot(om[anfxc],alp_im[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)],linewidth=2,label=anfxc)
+
         if crystal == 'Si' and not bigrange:
             axins.plot(om[anfxc][om[anfxc]<=10.0],alp_re[anfxc][om[anfxc]<=10.0],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)],linewidth=1.5)
     if crystal == 'Si' and not bigrange:
@@ -272,6 +311,19 @@ def plotter(fxcl,sign_conv=1):
         ax[i].xaxis.set_minor_locator(MultipleLocator(axpars['x'][crystal][0]))
         ax[i].xaxis.set_major_locator(MultipleLocator(axpars['x'][crystal][1]))
 
+    if crystal in semicond_regex:
+
+        # alpha is dimensionless
+        # beta given in unites of 10**(-3) * eV**(-2)
+        lrc_pars = {'Si': [0.13,0.00635], 'C': [0.28,0.00135]}
+        apar = lrc_pars[crystal][0]
+        bpar = lrc_pars[crystal][1]#*Eh_to_eV**2
+
+        #ax[0].plot(om[anfxc],apar + bpar*om[anfxc]**2,color=clist[ifxc+1],linestyle=line_styles[ifxc%len(line_styles)],linewidth=2,label='LRC')
+        ax[0].hlines(apar,ax[0].get_xlim()[0],ax[0].get_xlim()[1],linestyle='--',color='gray',linewidth=1)
+        if crystal == 'Si' and not bigrange:
+            axins.hlines(apar,axins.get_xlim()[0],axins.get_xlim()[1],linestyle='--',color='gray',linewidth=1)
+
     ax[0].xaxis.set_ticklabels([' ' for i in ax[0].xaxis.get_major_ticks()])
     ax[0].tick_params(axis='y',labelsize=20)
     if crystal in semicond_regex:
@@ -279,6 +331,25 @@ def plotter(fxcl,sign_conv=1):
     elif crystal in metal_regex:
         plt.suptitle('{:}, pseudopotential density'.format(crystal),fontsize=16)
     for ifxc,anfxc in enumerate(fxcl):
+        scl = 0.6
+        if bigrange and anfxc=='QV_MCP07_TD':
+            scl = 0.3
+        if crystal == 'C' and anfxc == '2p2h':
+            scl = 0.85
+        wind = np.argmin(np.abs(om[anfxc] - scl*olim))
+        if wind > om[anfxc].shape[0]-2:
+            wind = om[anfxc].shape[0]-2
+        if anfxc in ['QV','QV_MCP07_TD','2p2h'] and not bigrange and crystal in semicond_regex:
+            iax = 1
+            tp1 = alp_im[anfxc][wind-1]
+            tp2 = alp_im[anfxc][wind+1]
+        else:
+            iax = 0
+            tp1 = alp_re[anfxc][wind-1]
+            tp2 = alp_re[anfxc][wind+1]
+        p2 = ax[iax].transData.transform_point((om[anfxc][wind+1],tp2))
+        p1 = ax[iax].transData.transform_point((om[anfxc][wind-1],tp1))
+
         offset_d = {'Si':.01,'C':.01,'Al':.01,'Na':.005}
         offset=offset_d[crystal]
         if anfxc == 'DLDA':
@@ -289,24 +360,27 @@ def plotter(fxcl,sign_conv=1):
             lbl = 'MCP07, $\\overline{k}=0$'
             if crystal == 'C':
                 offset = -0.08
+        elif anfxc == 'QV_MCP07_TD':
+            lbl = 'QV-MCP07-TD'
+            offset = -0.04
         else:
             lbl = anfxc
             if crystal == 'Si':
                 offset = 0.04
             elif crystal == 'C':
                 offset = 0.02
-        wind = np.argmin(np.abs(om[anfxc] - 0.6*olim))
-        p2 = ax[0].transData.transform_point((om[anfxc][wind+1],alp_re[anfxc][wind+1]))
-        p1 = ax[0].transData.transform_point((om[anfxc][wind-1],alp_re[anfxc][wind-1]))
+
         angle = 180/pi*np.arctan((p2[1]-p1[1])/(p2[0]-p1[0]))
         if sign_conv<0:
-            fac = {'Si': {'DLDA':10, 'MCP07': -.2, 'MCP07_k0': -2.5, 'QV': 2},#{'DLDA':22, 'MCP07': 3.5, 'MCP07_k0': 14, 'QV': 2.5},
-            'C': {'DLDA': 3, 'MCP07': -.1, 'MCP07_k0': .02, 'QV': 1}}
+            fac = {'Si': {'DLDA':10, 'MCP07': -.2, 'MCP07_k0': -2.5, 'QV': -6.2, 'QV_MCP07_TD': 3.,'2p2h':-.7},#{'DLDA':22, 'MCP07': 3.5, 'MCP07_k0': 14, 'QV': 2.5},
+            'C': {'DLDA': 3, 'MCP07': -.1, 'MCP07_k0': .02, 'QV': -.7, 'QV_MCP07_TD': -.5,'2p2h':-.5}}
             if bigrange:
-                fac = {'Si': {'DLDA':12, 'MCP07': -.5, 'MCP07_k0': -2.2, 'QV': 3}}
+                fac = {'Si': {'DLDA':12, 'MCP07': -.5, 'MCP07_k0': -2.2, 'QV': 3, 'QV_MCP07_TD': 1.5,'2p2h':-1}}
             if crystal in fac:
                 offset *= -fac[crystal][anfxc]
-        ax[0].annotate(lbl,(om[anfxc][wind],alp_re[anfxc][wind]+offset),color=clist[ifxc],fontsize=14,rotation=angle,rotation_mode='anchor')
+        ax[iax].annotate(lbl,(om[anfxc][wind],alp_re[anfxc][wind]+offset),color=clist[ifxc],fontsize=14,rotation=angle,rotation_mode='anchor')
+    #ax[1].legend(fontsize=18,ncol=3,bbox_to_anchor=(0.5, -.4),loc='center')
+    ax[0].hlines(0,0.0,olim,color='gray',linewidth=1)
     plt.subplots_adjust(top=.93)
     #plt.show()
     #exit()
@@ -318,6 +392,6 @@ def plotter(fxcl,sign_conv=1):
 if __name__=="__main__":
     #plot_fourier_components()
     #exit()
-
-    #calc_alpha(['DLDA','MCP07_k0','MCP07','QV'])
-    plotter(['MCP07','MCP07_k0','DLDA','QV'],sign_conv=-1)
+    fnl_l = ['MCP07','MCP07_k0','DLDA','QV','QV_MCP07_TD','2p2h']
+    calc_alpha(['2p2h'])
+    plotter(fnl_l,sign_conv=-1)
