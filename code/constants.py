@@ -4,3 +4,5 @@ Eh_to_eV = 27.211386245988 # https://physics.nist.gov/cgi-bin/cuu/Value?hr
 bohr_to_ang = 0.529177210903 # https://physics.nist.gov/cgi-bin/cuu/Value?bohrrada0
 
 crystal = 'Si'
+
+clist=['darkblue','darkorange','darkgreen','darkred','indigo','black','tab:olive','tab:gray']

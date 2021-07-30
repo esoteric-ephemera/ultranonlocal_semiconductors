@@ -8,3 +8,4 @@ C/POTCAR
 C/r2scan/POTCAR
 code/fxc_fhnc_tab/raw_data
 code/model_fxc_unloc.py
+code/testing.py

@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-from constants import crystal,pi,Eh_to_eV
-#from gauss_quad import gauss_quad
+from constants import crystal,pi,Eh_to_eV,clist
 from mcp07 import chi_parser,mcp07_dynamic,mcp07_static,gki_dynamic_real_freq
 from qian_vignale_fxc import fxc_longitudinal as qv_fxc
 from pseudo_pt import get_n_g
@@ -19,7 +18,7 @@ if crystal in semicond_regex:
     from discrete_ft_n import dft_n
     from discrete_ft_n import oflnm as ft_dens_file
 
-bigrange = True
+bigrange = False
 use_multiprocesing = True
 for adir in ['./figs', './eps_figs']:
     if not path.isdir(adir):
@@ -126,7 +125,7 @@ def calc_alpha(fxcl):
     gmod,ng02,n_0_bar = init_n_g(crystal)
     print(('average density {:} bohr**(-3); rs_avg = {:} bohr').format(n_0_bar,(3.0/(4*pi*n_0_bar))**(1/3)))
     n_avg2 = n_0_bar**2
-    g_dot_q_hat = gmod**2
+    gmod2 = gmod**2
 
     Ng = gmod.shape[0]
     if bigrange:
@@ -180,42 +179,36 @@ def calc_alpha(fxcl):
             fxc_g0 = fxc_g0_dyn[fxc]
             fxc_g = fxc_g_dyn[fxc]
         elif fxc == 'QV_MCP07_TD':
-            dv_tmp = get_dens_vars_from_n(n_0_bar)
-            fxc_stat_tmp,f_alda,k_mcp07 = mcp07_static(gmod,dv_tmp,param='PW92')
-        elif fxc != '2p2h':
-            if nproc == 1:
-                fxc_g0 = wrap_kernel(gmod,0.0,n_0_bar,fxc)
-            else:
-                pool = mp.Pool(processes=nproc)
-                fxc_g0_tmp = pool.starmap(wrap_kernel,product(gmod,[0.0],[n_0_bar],[fxc]))
-                pool.close()
-                fxc_g0 = np.zeros(Ng,dtype='complex')
-                for ifxcg in range(Ng):
-                    fxc_g0[ifxcg] = fxc_g0_tmp[ifxcg]
+            fxc_stat_tmp,f_alda,k_mcp07 = mcp07_static(gmod,get_dens_vars_from_n(n_0_bar),param='PW92')
+        elif fxc not in ['2p2h']:
+            fxc_g0 = wrap_kernel(gmod,0.0,n_0_bar,fxc)
 
         alpha = np.zeros(Nw,dtype='complex')
 
         ofl = wdir+'alpha_omega_'+fxc+addn+'.csv'
-        intwg = 1.0/3.0
 
-        for iom,om in enumerate(omega_l):
+        if fxc in dyn_only_regex:
+            fxc_diff = fxc_g - fxc_g0
+            rlv_sum = np.sum(gmod2*ng02)/(3*n_avg2)
+            alpha = rlv_sum*fxc_diff
+        else:
 
-            if fxc in dyn_only_regex:
-                fxc_diff = fxc_g[iom] - fxc_g0
-            elif fxc == 'QV_MCP07_TD':
-                fxc_g0 = (1 + np.exp(-k_mcp07*gmod**2)*(fxc_g0_dyn['QV_MCP07_TD']/f_alda - 1))*fxc_stat_tmp
-                fxc_g = (1 + np.exp(-k_mcp07*gmod**2)*(fxc_g_dyn['QV_MCP07_TD'][iom]/f_alda - 1))*fxc_stat_tmp
-                fxc_diff = fxc_g - fxc_g0
-            elif fxc == '2p2h':
-                # maximum tabulated value for 2p2h kernel is 3.98 omega_p(0)
-                if om <= wcut_2p2h:
-                    fxc_diff = fxcdyn[:,iom] - fxcdyn[:,0]
+            for iom,om in enumerate(omega_l):
+
+                if fxc == 'QV_MCP07_TD':
+                    fxc_g0 = (1 + np.exp(-k_mcp07*gmod**2)*(fxc_g0_dyn['QV_MCP07_TD']/f_alda - 1))*fxc_stat_tmp
+                    fxc_g = (1 + np.exp(-k_mcp07*gmod**2)*(fxc_g_dyn['QV_MCP07_TD'][iom]/f_alda - 1))*fxc_stat_tmp
+                    fxc_diff = fxc_g - fxc_g0
+                elif fxc == '2p2h':
+                    # maximum tabulated value for 2p2h kernel is 3.98 omega_p(0)
+                    if om <= wcut_2p2h:
+                        fxc_diff = fxcdyn[:,iom] - fxcdyn[:,0]
+                    else:
+                        break
                 else:
-                    break
-            else:
-                fxc_g = wrap_kernel(gmod,om,n_0_bar,fxc)
-                fxc_diff = fxc_g - fxc_g0
-            alpha[iom] = intwg*np.sum(g_dot_q_hat*fxc_diff*ng02)/n_avg2
+                    fxc_g = wrap_kernel(gmod,om,n_0_bar,fxc)
+                    fxc_diff = fxc_g - fxc_g0
+                alpha[iom] = np.sum(gmod2*fxc_diff*ng02)/(3*n_avg2)
 
         if fxc == '2p2h':
             wmask = omega_l <= wcut_2p2h
@@ -228,7 +221,6 @@ def calc_alpha(fxcl):
 
 def plotter(fxcl,sign_conv=1):
 
-    clist=['darkblue','darkorange','darkgreen','darkred','indigo','black','tab:olive','tab:gray']
     line_styles=['-','--','-.']
 
     if bigrange:
@@ -254,8 +246,8 @@ def plotter(fxcl,sign_conv=1):
         om[anfxc]*=Eh_to_eV
         mask = om[anfxc]<=olim
         om[anfxc] = om[anfxc][mask]
-        alp_re[anfxc] = alp_re[anfxc][mask]
-        alp_im[anfxc] = alp_im[anfxc][mask]
+        alp_re[anfxc] = sign_conv*alp_re[anfxc][mask]
+        alp_im[anfxc] = sign_conv*alp_im[anfxc][mask]
 
         if sign_conv > 0:
             # positive sign for sign convention that f_xc(q,omega) ~ (alpha + beta*omega**2)/q**2, a la Nazaraov & Vignale
@@ -263,8 +255,6 @@ def plotter(fxcl,sign_conv=1):
             min_bd = min([min_bd,alp_im[anfxc].min()])
         elif sign_conv < 0:
             # negative sign for sign convention that f_xc(q,omega) ~ -(alpha + beta*omega**2)/q**2, a la Botti & Reining
-            alp_re[anfxc]*= -1
-            alp_im[anfxc]*= -1
             max_bd = max([max_bd,alp_im[anfxc].max()])
             min_bd = min([min_bd,alp_re[anfxc].min()])
         ax[0].plot(om[anfxc],alp_re[anfxc],color=clist[ifxc],linestyle=line_styles[ifxc%len(line_styles)],linewidth=2,label=anfxc)
@@ -390,8 +380,9 @@ def plotter(fxcl,sign_conv=1):
     return
 
 if __name__=="__main__":
+
     #plot_fourier_components()
     #exit()
     fnl_l = ['MCP07','MCP07_k0','DLDA','QV','QV_MCP07_TD','2p2h']
-    calc_alpha(['2p2h'])
-    plotter(fnl_l,sign_conv=-1)
+    calc_alpha(['QV_MCP07_TD'])
+    #plotter(fnl_l,sign_conv=-1)
